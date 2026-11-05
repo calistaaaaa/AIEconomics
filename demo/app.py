@@ -134,7 +134,7 @@ if fred_key:
                 
             st.plotly_chart(fig2, use_container_width=True)
 
-        # 第三區塊：AI 智能總體經濟摘要生成（已修正模型清單）
+        # 第三區塊：AI 智能總體經濟摘要生成（內建多模型與智慧重試機制）
         st.write("---")
         st.subheader("🤖 AI 智能總體經濟摘要")
         
@@ -144,7 +144,7 @@ if fred_key:
             elif not gemini_key:
                 st.warning("⚠️ 請先在側邊欄輸入您的 Gemini API Key，或設定至 Streamlit Secrets 中！")
             else:
-                with st.spinner("AI 正在分析數據（正透過新版 SDK 呼叫支援的模型中...）"):
+                with st.spinner("AI 正在分析數據（遭遇 503 時正自動切換模型並重試中...）"):
                     try:
                         client = genai.Client(api_key=gemini_key)
                         latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
@@ -156,7 +156,7 @@ if fred_key:
                         - 10年期美債殖利率: {latest_rate:.2f}%
                         - 2年期美債殖利率: {latest_2y:.2f}%
                         - 10Y-2Y 殖利率利差: {latest_spread:.2f}% (若小於 0 代表倒掛)
-                        - US 失業率: {latest_unemp:.1f}%
+                        - 美國失業率: {latest_unemp:.1f}%
                         - 聯邦基金利率: {latest_fed:.2f}%
                         - 日本 10 年期國債殖利率: {latest_jp:.2f}%
                         - 黃金現貨價格: ${latest_gold:.1f}
@@ -164,31 +164,38 @@ if fred_key:
                         請分析當前的通膨、利率環境、潛在的經濟衰退風險（如美債倒掛情況）以及避險資產（如黃金）的市場表現，語氣需專業、客觀且具備宏觀洞察力。
                         """
                         
-                        # 只保留目前新版 google-genai 穩定支援的模型
+                        # 涵蓋 Flash 與 Pro 模型，確保即使一邊壅塞也能由另一邊接手
                         models_to_try = [
                             "gemini-2.5-flash", 
-                            "gemini-3.8-flash"
+                            "gemini-3.8-flash",
+                            "gemini-2.5-pro"
                         ]
                         
                         response = None
                         last_error = None
                         
+                        # 智慧重試迴圈：每個模型嘗試 2 次，每次失敗自動遞增等待時間
                         for model_name in models_to_try:
-                            try:
-                                response = client.models.generate_content(
-                                    model=model_name,
-                                    contents=prompt,
-                                )
-                                break 
-                            except Exception as err:
-                                last_error = err
-                                time.sleep(1) 
+                            success_flag = False
+                            for attempt in range(2):
+                                try:
+                                    response = client.models.generate_content(
+                                        model=model_name,
+                                        contents=prompt,
+                                    )
+                                    success_flag = True
+                                    break
+                                except Exception as err:
+                                    last_error = err
+                                    time.sleep(3 * (attempt + 1))  # 第1次等3秒，第2次等6秒
+                            if success_flag:
+                                break
                         
                         if response:
                             st.success("✅ AI 總體經濟短評生成完畢：")
                             st.info(response.text)
                         else:
-                            st.error(f"AI 摘要生成失敗。詳細錯誤訊息: {last_error}")
+                            st.error(f"⚠️ Google 伺服器目前全面高負載（503），自動重試仍無法連線。建議稍候 1 分鐘後再點擊一次。詳細錯誤: {last_error}")
                             
                     except Exception as e:
                         st.error(f"系統發生未預期的錯誤: {e}")
