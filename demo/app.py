@@ -144,7 +144,7 @@ if fred_key:
             elif not gemini_key:
                 st.warning("⚠️ 請先在側邊欄輸入您的 Gemini API Key，或設定至 Streamlit Secrets 中！")
             else:
-                with st.spinner("AI 正在分析當前數據並撰寫總結短評..."):
+                with st.spinner("AI 正在分析當前數據並撰寫總結短評（若遇伺服器繁忙會自動切換備援模型）..."):
                     try:
                         client = genai.Client(api_key=gemini_key)
                         latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
@@ -164,8 +164,12 @@ if fred_key:
                         請分析當前的通膨、利率環境、潛在的經濟衰退風險（如美債倒掛情況）以及避險資產（如黃金）的市場表現，語氣需專業、客觀且具備宏觀洞察力。
                         """
                         
-                        # 自動備援模型機制
-                        models_to_try = ["gemini-2.5-flash", "gemini-3.8-flash"]
+                        # 擴充備援清單：依序嘗試多個模型以避開單一模型高流量
+                        models_to_try = [
+                            "gemini-2.5-flash", 
+                            "gemini-3.8-flash", 
+                            "gemini-1.5-flash"
+                        ]
                         response = None
                         last_error = None
                         
@@ -175,7 +179,7 @@ if fred_key:
                                     model=model_name,
                                     contents=prompt,
                                 )
-                                break
+                                break  # 成功取得回應即跳出迴圈
                             except Exception as err:
                                 last_error = err
                                 continue
@@ -184,12 +188,10 @@ if fred_key:
                             st.success("✅ AI 總體經濟短評生成完畢：")
                             st.info(response.text)
                         else:
-                            raise last_error
+                            # 如果所有備援模型都遇到 503
+                            st.warning("⚠️ Google 伺服器目前流量較大（503 伺服器繁忙），請稍等 3 到 5 秒後再點擊一次「產生 AI 總體經濟摘要」按鈕即可！")
                             
                     except Exception as e:
-                        st.error(f"AI 摘要生成失敗（可能為模型名稱錯誤或 API 額度限制）。錯誤訊息: {e}")
-
-    except Exception as e:
-        st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
-else:
-    st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
+                        st.error(f"AI 摘要生成失敗。錯誤訊息: {e}")
+                      
+                           
