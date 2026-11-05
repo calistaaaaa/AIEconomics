@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import yfinance as yf
 from fredapi import Fred
+from google import genai  # 導入新版 google-genai 套件
 
 # 頁面基本配置
 st.set_page_config(page_title="總體經濟與金融即時儀表板", layout="wide")
@@ -11,12 +12,19 @@ st.title("🌐 全球總體經濟與金融指標即時儀表板")
 # 側邊欄：輸入 API Key 與刷新控制
 st.sidebar.header("⚙️ 設定與金鑰")
 
-# 優先使用 Streamlit Secrets，若無則讓學生在側邊欄輸入
+# 1. FRED API Key 設定
 if "FRED_API_KEY" in st.secrets:
     fred_key = st.secrets["FRED_API_KEY"]
-    st.sidebar.success("已自動讀取 Secrets 中的 API Key！")
+    st.sidebar.success("已自動讀取 FRED API Key！")
 else:
     fred_key = st.sidebar.text_input("請輸入你的 FRED API Key:", type="password")
+
+# 2. Gemini API Key 設定 (新增)
+if "GEMINI_API_KEY" in st.secrets:
+    gemini_key = st.secrets["GEMINI_API_KEY"]
+    st.sidebar.success("已自動讀取 Gemini API Key！")
+else:
+    gemini_key = st.sidebar.text_input("請輸入你的 Gemini API Key:", type="password", key="gemini_input")
 
 if st.sidebar.button("手動刷新數據"):
     st.cache_data.clear()
@@ -28,7 +36,7 @@ def get_fred_data(api_key):
     data = {
         "CPI 物價指數": fred.get_series("CPIAUCSL"),
         "10年期美債殖利率": fred.get_series("DGS10"),
-        "2年期美債殖利率": fred.get_series("DGS2"),  # 新增：2年期美債
+        "2年期美債殖利率": fred.get_series("DGS2"),
         "美國失業率": fred.get_series("UNRATE"),
         "聯邦基金利率": fred.get_series("FEDFUNDS"),
         "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")
@@ -59,13 +67,13 @@ if fred_key:
         macro_df = get_fred_data(fred_key)
         market_df = get_market_data()
 
-        # 檢查並顯示美債利差警示燈號
+        # 取得最新數值供後續使用
         latest_spread = macro_df["美債殖利率利差 (10Y-2Y)"].dropna().iloc[-1]
         spread_prev = macro_df["美債殖利率利差 (10Y-2Y)"].dropna().iloc[-2]
 
+        # 檢查並顯示美債利差警示燈號
         st.subheader("🚨 關鍵總體經濟指標與景氣警示")
         
-        # 若利差小於 0 顯示紅色警告，否則顯示正常狀態
         if latest_spread < 0:
             st.error(f"⚠️ **警示：美國 10 年期與 2 年期美債殖利率出現倒掛！當前利差為 {latest_spread:+.2f}%（前一日：{spread_prev:+.2f}%）。歷史經驗顯示這通常是經濟衰退的重要領先指標。**")
         else:
@@ -114,11 +122,51 @@ if fred_key:
             macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_select")
             fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
             
-            # 若選到了利差，可以額外在圖表中加上一條 0 軸參考線方便觀察倒掛
             if macro_choice == "美債殖利率利差 (10Y-2Y)":
                 fig2.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="倒掛分界線 (0%)")
                 
             st.plotly_chart(fig2, use_container_width=True)
+
+        # 第三區塊：AI 總體經濟摘要生成 (新增)
+        st.write("---")
+        st.subheader("🤖 AI 智能總體經濟摘要")
+        
+        if st.button("產生 AI 總體經濟摘要"):
+            if not gemini_key:
+                st.warning("⚠️ 請先在側邊欄輸入您的 Gemini API Key，或設定至 Streamlit Secrets 中！")
+            else:
+                with st.spinner("AI 正在分析當前數據並撰寫總結短評..."):
+                    try:
+                        client = genai.Client(api_key=gemini_key)
+                        
+                        # 整理準備傳給 AI 的當前最新數據
+                        latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
+                        latest_2y = macro_df["2年期美債殖利率"].dropna().iloc[-1]
+                        
+                        prompt = f"""
+                        你是一位專業的總體經濟學家與金融分析師。請根據以下最新抓取的即時總體經濟與市場數據，撰寫一份大約 200 字的專業總體經濟短評（使用繁體中文）：
+                        - CPI 物價指數: {latest_cpi:.1f}
+                        - 10年期美債殖利率: {latest_rate:.2f}%
+                        - 2年期美債殖利率: {latest_2y:.2f}%
+                        - 10Y-2Y 殖利率利差: {latest_spread:.2f}% (若小於 0 代表倒掛)
+                        - 美國失業率: {latest_unemp:.1f}%
+                        - 聯邦基金利率: {latest_fed:.2f}%
+                        - 日本 10 年期國債殖利率: {latest_jp:.2f}%
+                        - 黃金現貨價格: ${latest_gold:.1f}
+                        
+                        請分析當前的通膨、利率環境、潛在的經濟衰退風險（如美債倒掛情況）以及避險資產（如黃金）的市場表現，語氣需專業、客觀且具備宏觀洞察力。
+                        """
+                        
+                        response = client.models.generate_content(
+                            model='gemini-2.5-flash',
+                            contents=prompt,
+                        )
+                        
+                        st.success("✅ AI 總體經濟短評生成完畢：")
+                        st.info(response.text)
+                        
+                    except Exception as e:
+                        st.error(f"AI 摘要生成失敗，請檢查 Gemini API Key 是否正確。錯誤訊息: {e}")
 
     except Exception as e:
         st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
