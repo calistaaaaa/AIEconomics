@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import yfinance as yf
 from fredapi import Fred
+import time
 
 # 🛡️ 安全匯入 google-genai，避免因未安裝套件而導致整個 App 啟動失敗
 try:
@@ -134,7 +135,7 @@ if fred_key:
                 
             st.plotly_chart(fig2, use_container_width=True)
 
-        # 第三區塊：AI 智能總體經濟摘要生成
+        # 第三區塊：AI 智能總體經濟摘要生成（內建自動重試機制）
         st.write("---")
         st.subheader("🤖 AI 智能總體經濟摘要")
         
@@ -144,7 +145,7 @@ if fred_key:
             elif not gemini_key:
                 st.warning("⚠️ 請先在側邊欄輸入您的 Gemini API Key，或設定至 Streamlit Secrets 中！")
             else:
-                with st.spinner("AI 正在分析當前數據並撰寫總結短評（若遇伺服器繁忙會自動切換備援模型）..."):
+                with st.spinner("AI 正在分析數據（若遇伺服器繁忙，系統正自動切換模型並重試中...）"):
                     try:
                         client = genai.Client(api_key=gemini_key)
                         latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
@@ -164,31 +165,38 @@ if fred_key:
                         請分析當前的通膨、利率環境、潛在的經濟衰退風險（如美債倒掛情況）以及避險資產（如黃金）的市場表現，語氣需專業、客觀且具備宏觀洞察力。
                         """
                         
-                        # 多模型自動備援機制（依序嘗試多個模型以避開單一模型高流量 503 錯誤）
                         models_to_try = [
                             "gemini-2.5-flash", 
                             "gemini-3.8-flash", 
                             "gemini-1.5-flash"
                         ]
+                        
                         response = None
                         last_error = None
                         
+                        # 迴圈：依序嘗試不同模型，每個模型最多自動重試 2 次 (間隔 2 秒)
                         for model_name in models_to_try:
-                            try:
-                                response = client.models.generate_content(
-                                    model=model_name,
-                                    contents=prompt,
-                                )
-                                break
-                            except Exception as err:
-                                last_error = err
-                                continue
+                            success_for_this_model = False
+                            for attempt in range(2): 
+                                try:
+                                    response = client.models.generate_content(
+                                        model=model_name,
+                                        contents=prompt,
+                                    )
+                                    success_for_this_model = True
+                                    break 
+                                except Exception as err:
+                                    last_error = err
+                                    time.sleep(2) 
+                                    
+                            if success_for_this_model:
+                                break 
                         
                         if response:
                             st.success("✅ AI 總體經濟短評生成完畢：")
                             st.info(response.text)
                         else:
-                            st.warning("⚠️ Google 伺服器目前流量較大（503 伺服器繁忙），請稍等 3 到 5 秒後再點擊一次「產生 AI 總體經濟摘要」按鈕即可！")
+                            st.warning(f"⚠️ Google 伺服器目前持續繁忙（503）或額度已達上限。請等待 1~2 分鐘後再點擊一次按鈕。詳細錯誤: {last_error}")
                             
                     except Exception as e:
                         st.error(f"AI 摘要生成失敗。錯誤訊息: {e}")
