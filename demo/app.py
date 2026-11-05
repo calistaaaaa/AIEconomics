@@ -129,13 +129,12 @@ if fred_key:
             macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_select")
             fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
             
-            # 若選到了利差，加上 0 軸參考線
             if macro_choice == "美債殖利率利差 (10Y-2Y)":
                 fig2.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="倒掛分界線 (0%)")
                 
             st.plotly_chart(fig2, use_container_width=True)
 
-        # 第三區塊：AI 智能總體經濟摘要生成（內建自動重試機制）
+        # 第三區塊：AI 智能總體經濟摘要生成（已修正模型清單）
         st.write("---")
         st.subheader("🤖 AI 智能總體經濟摘要")
         
@@ -145,7 +144,7 @@ if fred_key:
             elif not gemini_key:
                 st.warning("⚠️ 請先在側邊欄輸入您的 Gemini API Key，或設定至 Streamlit Secrets 中！")
             else:
-                with st.spinner("AI 正在分析數據（若遇伺服器繁忙，系統正自動切換模型並重試中...）"):
+                with st.spinner("AI 正在分析數據（正透過新版 SDK 呼叫支援的模型中...）"):
                     try:
                         client = genai.Client(api_key=gemini_key)
                         latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
@@ -157,7 +156,7 @@ if fred_key:
                         - 10年期美債殖利率: {latest_rate:.2f}%
                         - 2年期美債殖利率: {latest_2y:.2f}%
                         - 10Y-2Y 殖利率利差: {latest_spread:.2f}% (若小於 0 代表倒掛)
-                        - 美國失業率: {latest_unemp:.1f}%
+                        - US 失業率: {latest_unemp:.1f}%
                         - 聯邦基金利率: {latest_fed:.2f}%
                         - 日本 10 年期國債殖利率: {latest_jp:.2f}%
                         - 黃金現貨價格: ${latest_gold:.1f}
@@ -165,41 +164,34 @@ if fred_key:
                         請分析當前的通膨、利率環境、潛在的經濟衰退風險（如美債倒掛情況）以及避險資產（如黃金）的市場表現，語氣需專業、客觀且具備宏觀洞察力。
                         """
                         
+                        # 只保留目前新版 google-genai 穩定支援的模型
                         models_to_try = [
                             "gemini-2.5-flash", 
-                            "gemini-3.8-flash", 
-                            "gemini-1.5-flash"
+                            "gemini-3.8-flash"
                         ]
                         
                         response = None
                         last_error = None
                         
-                        # 迴圈：依序嘗試不同模型，每個模型最多自動重試 2 次 (間隔 2 秒)
                         for model_name in models_to_try:
-                            success_for_this_model = False
-                            for attempt in range(2): 
-                                try:
-                                    response = client.models.generate_content(
-                                        model=model_name,
-                                        contents=prompt,
-                                    )
-                                    success_for_this_model = True
-                                    break 
-                                except Exception as err:
-                                    last_error = err
-                                    time.sleep(2) 
-                                    
-                            if success_for_this_model:
+                            try:
+                                response = client.models.generate_content(
+                                    model=model_name,
+                                    contents=prompt,
+                                )
                                 break 
+                            except Exception as err:
+                                last_error = err
+                                time.sleep(1) 
                         
                         if response:
                             st.success("✅ AI 總體經濟短評生成完畢：")
                             st.info(response.text)
                         else:
-                            st.warning(f"⚠️ Google 伺服器目前持續繁忙（503）或額度已達上限。請等待 1~2 分鐘後再點擊一次按鈕。詳細錯誤: {last_error}")
+                            st.error(f"AI 摘要生成失敗。詳細錯誤訊息: {last_error}")
                             
                     except Exception as e:
-                        st.error(f"AI 摘要生成失敗。錯誤訊息: {e}")
+                        st.error(f"系統發生未預期的錯誤: {e}")
 
     except Exception as e:
         st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
