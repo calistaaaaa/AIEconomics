@@ -28,11 +28,15 @@ def get_fred_data(api_key):
     data = {
         "CPI 物價指數": fred.get_series("CPIAUCSL"),
         "10年期美債殖利率": fred.get_series("DGS10"),
+        "2年期美債殖利率": fred.get_series("DGS2"),  # 新增：2年期美債
         "美國失業率": fred.get_series("UNRATE"),
         "聯邦基金利率": fred.get_series("FEDFUNDS"),
-        "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")  # 新增：日本10年期公債殖利率
+        "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")
     }
     df = pd.DataFrame(data).ffill().tail(365)
+    
+    # 計算 10 年期減去 2 年期美債殖利率利差 (10Y - 2Y)
+    df["美債殖利率利差 (10Y-2Y)"] = df["10年期美債殖利率"] - df["2年期美債殖利率"]
     return df
 
 # 2. 抓取 Market 數據 (設快取 10 分鐘)
@@ -43,7 +47,7 @@ def get_market_data():
         "台灣加權指數": "^TWII",
         "布蘭特原油": "BZ=F",
         "美元/台幣匯率": "TWD=X",
-        "黃金現貨價格": "GC=F"  # 新增：黃金期貨/現貨代理代號
+        "黃金現貨價格": "GC=F"
     }
     df = yf.download(list(tickers.values()), period="1y")["Close"]
     df.rename(columns={v: k for k, v in tickers.items()}, inplace=True)
@@ -55,9 +59,19 @@ if fred_key:
         macro_df = get_fred_data(fred_key)
         market_df = get_market_data()
 
-        # 第一區塊：核心 KPI 卡片 (分兩行排版以容納新增指標，保持美觀)
-        st.subheader("📊 關鍵總體經濟與市場指標")
+        # 檢查並顯示美債利差警示燈號
+        latest_spread = macro_df["美債殖利率利差 (10Y-2Y)"].dropna().iloc[-1]
+        spread_prev = macro_df["美債殖利率利差 (10Y-2Y)"].dropna().iloc[-2]
+
+        st.subheader("🚨 關鍵總體經濟指標與景氣警示")
         
+        # 若利差小於 0 顯示紅色警告，否則顯示正常狀態
+        if latest_spread < 0:
+            st.error(f"⚠️ **警示：美國 10 年期與 2 年期美債殖利率出現倒掛！當前利差為 {latest_spread:+.2f}%（前一日：{spread_prev:+.2f}%）。歷史經驗顯示這通常是經濟衰退的重要領先指標。**")
+        else:
+            st.success(f"✅ 美國 10Y-2Y 美債利差正常：{latest_spread:+.2f}%（大於 0，未倒掛）")
+
+        # 第一區塊：核心 KPI 卡片
         col1, col2, col3, col4, col5, col6 = st.columns(6)
         
         with col1:
@@ -70,13 +84,12 @@ if fred_key:
             st.metric("10年美債殖利率", f"{latest_rate:.2f}%", f"{latest_rate - rate_prev:+.2f}%")
             
         with col3:
+            st.metric("10Y-2Y 美債利差", f"{latest_spread:.2f}%", f"{latest_spread - spread_prev:+.2f}%")
+            
+        with col4:
             latest_unemp = macro_df["美國失業率"].dropna().iloc[-1]
             st.metric("美國失業率", f"{latest_unemp:.1f}%")
             
-        with col4:
-            latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
-            st.metric("聯邦基金利率", f"{latest_fed:.2f}%")
-
         with col5:
             latest_jp = macro_df["日本10年期國債殖利率"].dropna().iloc[-1]
             st.metric("日本10年國債", f"{latest_jp:.2f}%")
@@ -93,13 +106,18 @@ if fred_key:
         tab1, tab2 = st.tabs(["金融市場走勢 (yfinance)", "總體經濟趨勢 (FRED)"])
         
         with tab1:
-            market_choice = st.selectbox("選擇金融市場標的：", market_df.columns)
+            market_choice = st.selectbox("選擇金融市場標的：", market_df.columns, key="market_select")
             fig1 = px.line(market_df, y=market_choice, title=f"{market_choice} 近一年走勢")
             st.plotly_chart(fig1, use_container_width=True)
             
         with tab2:
-            macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns)
+            macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_select")
             fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
+            
+            # 若選到了利差，可以額外在圖表中加上一條 0 軸參考線方便觀察倒掛
+            if macro_choice == "美債殖利率利差 (10Y-2Y)":
+                fig2.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="倒掛分界線 (0%)")
+                
             st.plotly_chart(fig2, use_container_width=True)
 
     except Exception as e:
