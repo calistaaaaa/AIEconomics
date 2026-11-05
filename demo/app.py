@@ -29,13 +29,12 @@ def get_fred_data(api_key):
         "CPI 物價指數": fred.get_series("CPIAUCSL"),
         "10年期美債殖利率": fred.get_series("DGS10"),
         "美國失業率": fred.get_series("UNRATE"),
-        "聯邦基金利率": fred.get_series("FEDFUNDS"),
-        "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")  # 新增：日本長債殖利率
+        "聯邦基金利率": fred.get_series("FEDFUNDS")
     }
     df = pd.DataFrame(data).ffill().tail(365)
     return df
 
-# 2. 抓取 Market 數據 (設快取 10 分鐘)
+# 2. 抓取 Market 數據 (設快取 10 分鐘) - 已加入黃金與日本 10 年債
 @st.cache_data(ttl=600)
 def get_market_data():
     tickers = {
@@ -43,12 +42,11 @@ def get_market_data():
         "台灣加權指數": "^TWII",
         "布蘭特原油": "BZ=F",
         "美元/台幣匯率": "TWD=X",
-        "黃金現貨價格": "GC=F"  # 新增：黃金期現貨標的
+        "黃金現貨價格": "GC=F",           # 新增：黃金現貨
+        "日本10年期國債殖利率": "TMBMKJP-10Y" # 新增：日本 10 年債殖利率
     }
-    df = yf.download(list(tickers.values()), period="1y", progress=False)["Close"]
-    
-    if isinstance(df, pd.DataFrame):
-        df.rename(columns={v: k for k, v in tickers.items()}, inplace=True)
+    df = yf.download(list(tickers.values()), period="1y")["Close"]
+    df.rename(columns={v: k for k, v in tickers.items()}, inplace=True)
     return df
 
 # 頁面渲染邏輯
@@ -57,11 +55,11 @@ if fred_key:
         macro_df = get_fred_data(fred_key)
         market_df = get_market_data()
 
-        # 第一區塊：核心 KPI 卡片 (改為 3 + 2 兩排佈局，容納 5 個指標)
-        st.subheader("📊 關鍵總體經濟指標 (FRED)")
+        # 第一區塊：核心 KPI 卡片 (改為兩行 4 欄，讓版面整齊不擁擠)
+        st.subheader("📊 關鍵總體經濟與金融指標")
         
-        # 第一排：3 個指標
-        col1, col2, col3 = st.columns(3)
+        # 第一排：總體經濟指標 (FRED)
+        col1, col2, col3, col4 = st.columns(4)
         
         latest_cpi = macro_df["CPI 物價指數"].dropna().iloc[-1]
         col1.metric("CPI 物價指數", f"{latest_cpi:.1f}")
@@ -73,29 +71,41 @@ if fred_key:
         latest_unemp = macro_df["美國失業率"].dropna().iloc[-1]
         col3.metric("美國失業率", f"{latest_unemp:.1f}%")
         
-        # 第二排：2 個指標
-        col4, col5 = st.columns(2)
-        
         latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
         col4.metric("聯邦基金利率", f"{latest_fed:.2f}%")
+
+        # 第二排：重要市場與商品指標 (yfinance，包含新增的黃金與日本殖利率)
+        col5, col6, col7, col8 = st.columns(4)
         
-        latest_jp = macro_df["日本10年期國債殖利率"].dropna().iloc[-1]
-        jp_prev = macro_df["日本10年期國債殖利率"].dropna().iloc[-2]
-        col5.metric("日本10年期國債殖利率", f"{latest_jp:.2f}%", f"{latest_jp - jp_prev:+.2f}%")
+        latest_gold = market_df["黃金現貨價格"].dropna().iloc[-1]
+        gold_prev = market_df["黃金現貨價格"].dropna().iloc[-2]
+        col5.metric("黃金現貨價格", f"${latest_gold:,.1f}", f"{latest_gold - gold_prev:+,.1f}")
+        
+        latest_jpyield = market_df["日本10年期國債殖利率"].dropna().iloc[-1]
+        jpyield_prev = market_df["日本10年期國債殖利率"].dropna().iloc[-2]
+        col6.metric("日本10年債殖利率", f"{latest_jpyield:.2f}%", f"{latest_jpyield - jpyield_prev:+.2f}%")
+        
+        latest_sp = market_df["S&P 500"].dropna().iloc[-1]
+        sp_prev = market_df["S&P 500"].dropna().iloc[-2]
+        col7.metric("S&P 500 指數", f"{latest_sp:,.1f}", f"{latest_sp - sp_prev:+,.1f}")
+
+        latest_oil = market_df["布蘭特原油"].dropna().iloc[-1]
+        oil_prev = market_df["布蘭特原油"].dropna().iloc[-2]
+        col8.metric("布蘭特原油", f"${latest_oil:.2f}", f"{latest_oil - oil_prev:+.2f}")
 
         # 第二區塊：互動式圖表
         st.write("---")
         st.subheader("📈 市場走勢與總體指標折線圖")
         
-        tab1, tab2 = st.tabs(["金融市場走勢 (yfinance)", "總體經濟趨勢 (FRED)"])
+        tab1, tab2 = st.tabs(["金融市場與商品走勢 (yfinance)", "總體經濟趨勢 (FRED)"])
         
         with tab1:
-            market_choice = st.selectbox("選擇金融市場標的：", market_df.columns, key="market_select")
+            market_choice = st.selectbox("選擇金融市場或商品標的：", market_df.columns)
             fig1 = px.line(market_df, y=market_choice, title=f"{market_choice} 近一年走勢")
             st.plotly_chart(fig1, use_container_width=True)
             
         with tab2:
-            macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_select")
+            macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns)
             fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
             st.plotly_chart(fig2, use_container_width=True)
 
