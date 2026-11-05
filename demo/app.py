@@ -43,8 +43,12 @@ def get_market_data():
         "布蘭特原油": "BZ=F",
         "美元/台幣匯率": "TWD=X"
     }
-    df = yf.download(list(tickers.values()), period="1y")["Close"]
-    df.rename(columns={v: k for k, v in tickers.items()}, inplace=True)
+    # 針對較新版本的 yfinance，使用 multi_level_index=False 可以確保抓下來的結構乾淨
+    df = yf.download(list(tickers.values()), period="1y", progress=False)["Close"]
+    
+    # 如果有多個欄位，重新命名對應的標的名稱
+    if isinstance(df, pd.DataFrame):
+        df.rename(columns={v: k for k, v in tickers.items()}, inplace=True)
     return df
 
 # 頁面渲染邏輯
