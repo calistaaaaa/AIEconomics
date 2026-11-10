@@ -112,7 +112,7 @@ if fred_key:
         with col6:
             latest_gold = market_df["黃金現貨價格"].dropna().iloc[-1]
             gold_prev = market_df["黃金現貨價格"].dropna().iloc[-2]
-            st.metric("黃金現貨價格", f"${latest_gold:.1f}", f"{latest_gold - gold_prev:+.1f}")
+            st.metric("黃金現貨價格", f"${latest_gold:.1f}", f"${latest_gold - gold_prev:+.1f}")
 
         # 第二區塊：互動式圖表
         st.write("---")
@@ -134,7 +134,7 @@ if fred_key:
                 
             st.plotly_chart(fig2, use_container_width=True)
 
-        # 第三區塊：AI 智能總體經濟摘要生成（已更新為正確支援的模型名稱）
+        # 第三區塊：AI 智能總體經濟摘要生成（改用 gemini-2.0-flash 與 gemini-1.5-flash）
         st.write("---")
         st.subheader("🤖 AI 智能總體經濟摘要")
         
@@ -144,7 +144,7 @@ if fred_key:
             elif not gemini_key:
                 st.warning("⚠️ 請先在側邊欄輸入您的 Gemini API Key，或設定至 Streamlit Secrets 中！")
             else:
-                with st.spinner("AI 正在分析數據（正透過正確的模型名稱生成中...）"):
+                with st.spinner("AI 正在透過穩定模型分析數據中..."):
                     try:
                         client = genai.Client(api_key=gemini_key)
                         latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
@@ -164,10 +164,10 @@ if fred_key:
                         請分析當前的通膨、利率環境、潛在的經濟衰退風險（如美債倒掛情況）以及避險資產（如黃金）的市場表現，語氣需專業、客觀且具備宏觀洞察力。
                         """
                         
-                        # 更新為目前最新支援的模型名稱
+                        # 更新為更穩定、官方主力推薦的 Flash 模型
                         models_to_try = [
-                            "gemini-2.5-flash", 
-                            "gemini-3.8-flash"
+                            "gemini-2.0-flash", 
+                            "gemini-1.5-flash"
                         ]
                         
                         response = None
