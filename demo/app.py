@@ -301,7 +301,7 @@ else:
                 st.plotly_chart(fig2, use_container_width=True)
 
         # ----------------------------------------------------
-        # 頁面三：股票/加密貨幣技術分析與 AI 預測（完全客製化不同資產的分析文案與視角）
+        # 頁面三：股票/加密貨幣技術分析與 AI 預測
         # ----------------------------------------------------
         elif nav_choice == "🤖 股票/加密貨幣技術分析與 AI 預測":
             st.title("📈 股票 / 加密貨幣技術分析與 AI 預測")
@@ -389,18 +389,18 @@ else:
                         
                         # 依照不同資產類別提供完全不同的專業分析角度與句型結構
                         if "比特幣" in selected_name or "以太坊" in selected_name:
-                            asset_angle = "加密資產高波動特性、鏈上流動性與期權交割前夕的籌碼博弈"
+                            asset_angle_text = "加密資產高波動特性、鏈上流動性與期權交割前夕的籌碼博弈"
                             strategy_advice = "由於加密貨幣市場全天候交易且槓桿率偏高，建議嚴格執行動態停損，並觀察爆倉量與資金費率變化。"
                         elif "台積電" in selected_name or "輝達" in selected_name or "蘋果" in selected_name:
-                            asset_angle = "科技巨頭基本面、機構法人籌碼集中度與法人成本線攻防"
+                            asset_angle_text = "科技巨頭基本面、機構法人籌碼集中度與法人成本線攻防"
                             strategy_advice = "權值與AI領導股受到國際半導體景氣與外資動向影響深遠，建議搭配法說會展望與月線支撐進行長線配置。"
                         else:
-                            asset_angle = "總體經濟循環、指數均線糾結處之方向選擇與避險資產配置"
+                            asset_angle_text = "總體經濟循環、指數均線糾結處之方向選擇與避險資產配置"
                             strategy_advice = "大盤指數型商品走勢穩健但易受總經數據干擾，建議採取定期定額或逢回分批承接策略以降低波動風險。"
 
                         fallback_tech = f"""### 📊 {selected_name} ({ticker_symbol}) 專屬量化技術報告 ({period_choice})
 
-1. **資產核心結構與趨勢解讀**：本篇報告聚焦於 **{selected_angle}**。當前收盤價報 **{latest_price:.2f}**，在區間內展現出獨特的價格軌跡。短期均線 SMA 20（**{sma20:.2f}**）與中期均線 SMA 50（**{sma50:.2f}**）正進行關鍵交疊。
+1. **資產核心結構與趨勢解讀**：本篇報告聚焦於 **{asset_angle_text}**。當前收盤價報 **{latest_price:.2f}**，在區間內展現出獨特的價格軌跡。短期均線 SMA 20（**{sma20:.2f}**）與中期均線 SMA 50（**{sma50:.2f}**）正進行關鍵交疊。
 2. **多空動能與指標解構**：14 日 RSI 目前停留在 **{latest_rsi:.1f}**，顯示多空雙方在當前水位正進行拉鋸；同時 MACD 差值（**{latest_macd:.2f}**）與訊號線（**{latest_signal:.2f}**）的相對關係，確立了短線動能的強弱轉換點。
 3. **專業操盤策略與風險提示**：針對 {selected_name} 的流動性與波動特性，{strategy_advice}"""
 
@@ -433,7 +433,7 @@ else:
                 st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
 
         # ----------------------------------------------------
-        # 頁面四：即時 Gemini AI 智慧分析戰情室（完全客製化不同搜尋關鍵字的輿論報告結構與內文）
+        # 頁面四：即時 Gemini AI 智慧分析戰情室
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.title("🤖 即時 Gemini AI 智慧分析戰情室")
@@ -470,7 +470,6 @@ else:
                             first_news = news_titles[0] if news_titles else "無最新頭條"
                             second_news = news_titles[1] if len(news_titles) > 1 else "關注後續發展"
                             
-                            # 依據關鍵字屬性動態變換分析觀點與語調
                             fallback_news = f"""### 🏛️ 「{search_kw}」主題專屬輿論與政策深度剖析
 
 1. **輿論風向與敏感度解構**：圍繞 **「{search_kw}」** 檢索到的最新財經頭條顯示，市場正高度聚焦於該議題帶來的政策轉折與資金重新定價。
@@ -500,7 +499,9 @@ else:
                                 st.success(f"✅ 「{search_kw}」AI 輿論剖析完成（主題專屬智慧引擎）：")
                                 st.info(fallback_news)
                     else:
-                        st.warning("./目前沒有可供分析的新聞資料。")
+                        st.warning("目前沒有可供分析的新聞資料。")
 
     except Exception as e:
         st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
+else:
+    st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
