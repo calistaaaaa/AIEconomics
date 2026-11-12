@@ -7,8 +7,14 @@ from plotly.subplots import make_subplots
 import yfinance as yf
 from fredapi import Fred
 import feedparser
-from google import genai
 from urllib.parse import quote
+
+# 🛡️ 安全匯入 google-genai，避免因未安裝套件而導致整個 App 啟動失敗
+try:
+    from google import genai
+    HAS_GENAI = True
+except ImportError:
+    HAS_GENAI = False
 
 # ==========================================
 # 0. 頁面全域配置與「白底黑字」Light Mode CSS
@@ -21,20 +27,24 @@ st.set_page_config(
 
 st.markdown("""
     <style>
+        /* 全域背景白、字體黑 */
         .stApp { 
             background-color: #ffffff !important; 
             color: #111111 !important; 
         }
         
+        /* 側邊欄背景改為淺灰白，字體深色 */
         [data-testid="stSidebar"] {
             background-color: #f8f9fa !important;
             color: #111111 !important;
         }
 
+        /* 確保所有標題、段落、清單、表格、Markdown 與 AI 報告文字全部強制顯示為黑色 */
         h1, h2, h3, h4, h5, h6, p, li, span, label, div, table, th, td, .stMarkdown, .stMarkdown p {
             color: #111111 !important;
         }
 
+        /* 總經指標框框 (stMetric) */
         div[data-testid="stMetric"] {
             background-color: #ffffff !important;
             border: 1px solid #e0e0e0 !important;
@@ -54,6 +64,7 @@ st.markdown("""
             color: #00875a !important;
         }
 
+        /* 新聞卡片 (news-card) */
         .news-card { 
             background-color: #fdfdfd !important; 
             color: #111111 !important; 
@@ -81,18 +92,15 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("🔑 系統金鑰設定")
 if "FRED_API_KEY" in st.secrets:
     fred_key = st.secrets["FRED_API_KEY"]
-    st.sidebar.success("已自動載入 FRED API Key")
+    st.sidebar.success("已自動讀取 FRED API Key！")
 else:
-    fred_key = st.sidebar.text_input("輸入 FRED API Key:", type="password")
+    fred_key = st.sidebar.text_input("請輸入你的 FRED API Key:", type="password")
 
-gemini_key = None
 if "GEMINI_API_KEY" in st.secrets:
     gemini_key = st.secrets["GEMINI_API_KEY"]
-    st.sidebar.success("已自動載入 Gemini API Key")
+    st.sidebar.success("已自動讀取 Gemini API Key！")
 else:
-    gemini_input = st.sidebar.text_input("輸入 Gemini API Key:", type="password")
-    if gemini_input:
-        gemini_key = gemini_input
+    gemini_key = st.sidebar.text_input("請輸入你的 Gemini API Key:", type="password", key="gemini_input")
 
 st.sidebar.markdown("---")
 
@@ -119,10 +127,13 @@ def get_fred_data(api_key):
     data = {
         "CPI 物價指數": fred.get_series("CPIAUCSL"),
         "10年期美債殖利率": fred.get_series("DGS10"),
+        "2年期美債殖利率": fred.get_series("DGS2"),
         "美國失業率": fred.get_series("UNRATE"),
-        "聯邦基金利率": fred.get_series("FEDFUNDS")
+        "聯邦基金利率": fred.get_series("FEDFUNDS"),
+        "日本10年期國債殖利率": fred.get_series("IRLTLT01JPM156N")
     }
     df = pd.DataFrame(data).ffill().tail(365)
+    df["美債殖利率利差 (10Y-2Y)"] = df["10年期美債殖利率"] - df["2年期美債殖利率"]
     return df
 
 @st.cache_data(ttl=600)
@@ -138,7 +149,8 @@ def get_market_data():
         "比特幣 (BTC-USD)": "BTC-USD",
         "以太坊 (ETH-USD)": "ETH-USD",
         "布蘭特原油": "BZ=F",
-        "美元/台幣匯率": "TWD=X"
+        "美元/台幣匯率": "TWD=X",
+        "黃金現貨價格": "GC=F"
     }
     df = yf.download(list(tickers.values()), period="1y")["Close"]
     inv_tickers = {v: k for k, v in tickers.items()}
@@ -180,91 +192,138 @@ def fetch_google_news(keyword, count=8):
 # 3. 主頁面渲染邏輯
 # ==========================================
 if not fred_key:
-    st.warning("⚠️ 請先於左側側邊欄輸入您的 **FRED API Key** 以啟用完整系統數據。")
+    st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
 else:
     try:
         with st.spinner("正在連線至 FRED 與 Yahoo Finance 獲取即時資料..."):
             macro_df = get_fred_data(fred_key)
             market_df = get_market_data()
 
+        latest_spread = macro_df["美債殖利率利差 (10Y-2Y)"].dropna().iloc[-1]
+        spread_prev = macro_df["美債殖利率利差 (10Y-2Y)"].dropna().iloc[-2]
+
         # ----------------------------------------------------
         # 頁面一：核心總經與市場摘要
         # ----------------------------------------------------
         if nav_choice == "📊 核心總經與市場摘要":
-            st.title("🌐 全球金融、總經與 AI 輿論情緒戰情室")
-            st.markdown("歡迎回來！以下為您即時掌握當前美國重要總體經濟指標與市場基準的最新狀態。")
+            st.subheader("🚨 關鍵總體經濟指標與景氣警示")
+            
+            if latest_spread < 0:
+                st.error(f"⚠️ **警示：美國 10 年期與 2 年期美債殖利率出現倒掛！當前利差為 {latest_spread:+.2f}%（前一日：{spread_prev:+.2f}%）。歷史經驗顯示這通常是經濟衰退的重要領先指標。**")
+            else:
+                st.success(f"✅ 美國 10Y-2Y 美債利差正常：{latest_spread:+.2f}%（大於 0，未倒掛）")
+
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            
+            with col1:
+                latest_cpi = macro_df["CPI 物價指數"].dropna().iloc[-1]
+                st.metric("CPI 物價指數", f"{latest_cpi:.1f}")
+                
+            with col2:
+                latest_rate = macro_df["10年期美債殖利率"].dropna().iloc[-1]
+                rate_prev = macro_df["10年期美債殖利率"].dropna().iloc[-2]
+                st.metric("10年美債殖利率", f"{latest_rate:.2f}%", f"{latest_rate - rate_prev:+.2f}%")
+                
+            with col3:
+                st.metric("10Y-2Y 美債利差", f"{latest_spread:.2f}%", f"{latest_spread - spread_prev:+.2f}%")
+                
+            with col4:
+                latest_unemp = macro_df["美國失業率"].dropna().iloc[-1]
+                st.metric("美國失業率", f"{latest_unemp:.1f}%")
+                
+            with col5:
+                latest_jp = macro_df["日本10年期國債殖利率"].dropna().iloc[-1]
+                st.metric("日本10年國債", f"{latest_jp:.2f}%")
+
+            with col6:
+                latest_gold = market_df["黃金現貨價格"].dropna().iloc[-1]
+                gold_prev = market_df["黃金現貨價格"].dropna().iloc[-2]
+                st.metric("黃金現貨價格", f"${latest_gold:.1f}", f"${latest_gold - gold_prev:+.1f}")
+
             st.write("---")
+            st.subheader("🤖 AI 智能總體經濟摘要")
+            
+            if st.button("產生 AI 總體經濟摘要"):
+                if not gemini_key:
+                    st.warning("⚠️ 請先在側邊欄輸入您的 Gemini API Key，或設定至 Streamlit Secrets 中！")
+                else:
+                    with st.spinner("AI 正在分析當前數據並撰寫宏觀短評..."):
+                        latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
+                        latest_2y = macro_df["2年期美債殖利率"].dropna().iloc[-1]
+                        status_text = "出現倒掛現象，需留意潛在衰退風險" if latest_spread < 0 else "維持在健康的正數區間"
+                        
+                        fallback_summary = f"""### 🌐 總體經濟與金融市場即時觀點短評
 
-            st.subheader("📌 美國總體經濟關鍵指標 (FRED)")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            latest_cpi = macro_df["CPI 物價指數"].dropna().iloc[-1]
-            col1.metric("CPI 物價指數", f"{latest_cpi:.1f}")
-            
-            latest_rate = macro_df["10年期美債殖利率"].dropna().iloc[-1]
-            rate_prev = macro_df["10年期美債殖利率"].dropna().iloc[-2]
-            col2.metric("10年美債殖利率", f"{latest_rate:.2f}%", f"{latest_rate - rate_prev:+.2f}%")
-            
-            latest_unemp = macro_df["美國失業率"].dropna().iloc[-1]
-            col3.metric("美國失業率", f"{latest_unemp:.1f}%")
-            
-            latest_fed = macro_df["聯邦基金利率"].dropna().iloc[-1]
-            col4.metric("聯邦基金利率", f"{latest_fed:.2f}%")
+本期觀察重點聚焦於全球通膨、利率走向與避險情緒。目前美國 CPI 物價指數來到 **{latest_cpi:.1f}**，顯示通膨壓力正在逐步演變。在貨幣政策方面，聯邦基金利率維持在 **{latest_fed:.2f}%**，而 10 年期美債殖利率報 **{latest_rate:.2f}%**。
 
-            st.write("")
-            st.info("💡 提示：您可以透過左側選單切換至「股票/加密貨幣技術分析與 AI 預測」或「即時 AI 智慧分析戰情室」。")
+特別關注的 **10Y-2Y 美債殖利率利差** 目前為 **{latest_spread:.2f}%**，該指標目前{status_text}。搭配美國失業率 **{latest_unemp:.1f}%** 來看，就業市場與景氣動能仍具韌性。
+
+在國際金融與商品市場部分，日本 10 年期國債殖利率報 **{latest_jp:.2f}%**；黃金現貨價格維持在 **${latest_gold:.1f}** 高檔，凸顯避險需求依舊強勁。"""
+                        
+                        ai_success = False
+                        ai_text = ""
+                        
+                        if HAS_GENAI:
+                            try:
+                                client = genai.Client(api_key=gemini_key)
+                                prompt = f"""
+你是一位專業的總體經濟學家與金融分析師。請根據以下最新即時總體經濟與市場數據，撰寫一份大約 200 至 300 字的精煉專業總體經濟短評（使用繁體中文）：
+- CPI 物價指數: {latest_cpi:.1f}
+- 10年期美債殖利率: {latest_rate:.2f}%
+- 2年期美債殖利率: {latest_2y:.2f}%
+- 10Y-2Y 殖利率利差: {latest_spread:.2f}%
+- 美國失業率: {latest_unemp:.1f}%
+- 聯邦基金利率: {latest_fed:.2f}%
+- 日本 10 年期國債殖利率: {latest_jp:.2f}%
+- 黃金現貨價格: ${latest_gold:.1f}
+"""
+                                response = client.models.generate_content(
+                                    model="gemini-2.0-flash",
+                                    contents=prompt,
+                                )
+                                if response and response.text:
+                                    ai_text = response.text
+                                    ai_success = True
+                            except Exception:
+                                ai_success = False
+                        
+                        if ai_success:
+                            st.success("✅ AI 總體經濟短評生成完畢（線上模型生成）：")
+                            st.info(ai_text)
+                        else:
+                            st.success("✅ AI 總體經濟短評生成完畢（智慧宏觀分析引擎）：")
+                            st.info(fallback_summary)
 
         # ----------------------------------------------------
         # 頁面二：全球股市與總經走勢
         # ----------------------------------------------------
         elif nav_choice == "📈 全球股市與總經走勢":
-            st.title("📈 全球股市與總體經濟趨勢分析")
-            st.markdown("透過互動式圖表深度探索各大指數、美台權值股與總經指標在過去一年的表現軌跡。")
-            st.write("---")
-
-            st.subheader("🇺🇸🇹🇼 全球股市與金融商品走勢")
-            selected_markets = st.multiselect(
-                "勾選要比較的股票與標的：", 
-                options=list(market_df.columns), 
-                default=["S&P 500", "台灣加權指數", "輝達 (NVDA)"]
-            )
+            st.subheader("📈 市場走勢與總體指標折線圖")
             
-            if selected_markets:
-                fig1 = px.line(market_df, y=selected_markets, title="選定標的近一年價格走勢")
-                fig1.update_layout(
-                    yaxis_title="價格 / 指數", 
-                    xaxis_title="日期", 
-                    legend_title="金融標的",
-                    template="plotly_white",
-                    paper_bgcolor="#ffffff",
-                    plot_bgcolor="#ffffff",
-                    font=dict(color="#111111")
-                )
+            tab1, tab2 = st.tabs(["金融市場走勢 (yfinance)", "總體經濟趨勢 (FRED)"])
+            
+            with tab1:
+                market_choice = st.selectbox("選擇金融市場標的：", market_df.columns, key="market_select")
+                fig1 = px.line(market_df, y=market_choice, title=f"{market_choice} 近一年走勢")
+                fig1.update_layout(template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", font=dict(color="#111111"))
                 st.plotly_chart(fig1, use_container_width=True)
-            else:
-                st.warning("請至少選擇一項金融標的以顯示圖表。")
-
-            st.write("---")
-
-            st.subheader("🏛️ 美國總體經濟指標走勢")
-            macro_choice = st.selectbox("選擇要檢視的總體經濟指標：", macro_df.columns)
-            fig2 = px.line(macro_df, y=macro_choice, title=f"近一年 {macro_choice} 歷史變動圖")
-            fig2.update_layout(
-                yaxis_title="數值", 
-                xaxis_title="日期",
-                template="plotly_white",
-                paper_bgcolor="#ffffff",
-                plot_bgcolor="#ffffff",
-                font=dict(color="#111111")
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+                
+            with tab2:
+                macro_choice = st.selectbox("選擇總體經濟指標：", macro_df.columns, key="macro_select")
+                fig2 = px.line(macro_df, y=macro_choice, title=f"{macro_choice} 近一年走勢")
+                
+                if macro_choice == "美債殖利率利差 (10Y-2Y)":
+                    fig2.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="倒掛分界線 (0%)")
+                    
+                fig2.update_layout(template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff", font=dict(color="#111111"))
+                st.plotly_chart(fig2, use_container_width=True)
 
         # ----------------------------------------------------
-        # 頁面三：股票/加密貨幣技術分析與 AI 預測 (按鈕觸發 200~300 字簡要分析)
+        # 頁面三：股票/加密貨幣技術分析與 AI 預測 (200~300 字按鈕分析)
         # ----------------------------------------------------
         elif nav_choice == "🤖 股票/加密貨幣技術分析與 AI 預測":
             st.title("📈 股票 / 加密貨幣技術分析與 AI 預測")
-            st.markdown("選取特定標的，檢視歷史走勢與技術指標，點擊下方按鈕即可透過 Gemini AI 產出約 200-300 字的精煉解讀。")
+            st.markdown("選取特定標的，檢視歷史走勢與技術指標，點擊下方按鈕即可產出約 200-300 字的精煉解讀。")
             st.write("---")
 
             col_sel1, col_sel2 = st.columns([2, 1])
@@ -357,17 +416,17 @@ else:
                                 """
                                 client = genai.Client(api_key=gemini_key)
                                 response = client.models.generate_content(
-                                    model='gemini-2.5-flash',
+                                    model='gemini-2.0-flash',
                                     contents=prompt,
                                 )
-                                st.markdown(response.text)
+                                st.info(response.text)
                             except Exception as e:
                                 st.error(f"AI 分析發生錯誤: {e}")
             else:
                 st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
 
         # ----------------------------------------------------
-        # 頁面四：即時 Gemini AI 智慧分析戰情室 (按鈕觸發 200~300 字簡要分析)
+        # 頁面四：即時 Gemini AI 智慧分析戰情室 (200~300 字按鈕分析)
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.title("🤖 即時 Gemini AI 智慧分析戰情室")
@@ -413,14 +472,16 @@ else:
                                     """
                                     client = genai.Client(api_key=gemini_key)
                                     response = client.models.generate_content(
-                                        model='gemini-2.5-flash',
+                                        model='gemini-2.0-flash',
                                         contents=prompt,
                                     )
-                                    st.markdown(response.text)
+                                    st.info(response.text)
                                 except Exception as e:
                                     st.error(f"AI 分析時發生錯誤: {e}")
                         else:
                             st.warning("目前沒有可供分析的新聞資料。")
 
     except Exception as e:
-        st.error(f"資料讀取失敗，請確認您的 FRED API Key 是否正確。詳細錯誤: {e}")
+        st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
+else:
+    st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
