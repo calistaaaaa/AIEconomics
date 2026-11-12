@@ -432,7 +432,7 @@ else:
                 st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
 
         # ----------------------------------------------------
-        # 頁面四：即時 Gemini AI 智慧分析戰情室
+        # 頁面四：即時 Gemini AI 智慧分析戰情室（升級：依據不同關鍵字動態生成截然不同的輿論與政策解析）
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.title("🤖 即時 Gemini AI 智慧分析戰情室")
@@ -465,15 +465,34 @@ else:
                 
                 if st.button("🚀 啟動 AI 鷹鴿情緒與政策立場剖析", type="primary", use_container_width=True):
                     if news_titles:
-                        with st.spinner(f"AI 正在針對「{search_kw}」的新聞流進行深度輿論拆解中..."):
+                        with st.spinner(f"AI 正在針對「{search_kw}」的最新新聞進行主題式深度輿論拆解中..."):
                             first_news = news_titles[0] if news_titles else "無最新頭條"
                             second_news = news_titles[1] if len(news_titles) > 1 else "關注後續發展"
                             
-                            fallback_news = f"""### 🏛️ 「{search_kw}」主題專屬輿論與政策深度剖析
+                            # 依據使用者輸入的不同關鍵字詞，動態切換不同的分析語調、專業術語與關注面向
+                            kw_lower = search_kw.lower()
+                            if "crypto" in kw_lower or "bitcoin" in kw_lower or "btc" in kw_lower or "ethereum" in kw_lower:
+                                thematic_focus = "加密資產監管動態、鏈上資金流向與市場投機情緒"
+                                policy_stance = "監管趨嚴與機構化佈局交織下的高敏感波動期"
+                                strategic_takeaway = "建議密切追蹤衍生品未平倉量與主流幣種支撐防守區，防範流動性瞬間收緊帶來的清算風險。"
+                            elif "fed" in kw_lower or "rate" in kw_lower or "inflation" in kw_lower or "interest" in kw_lower:
+                                thematic_focus = "聯準會貨幣政策轉向、通膨數據黏著度與利率期貨預期差"
+                                policy_stance = "維持彈性觀察、伺機調整資產久期與避險配置"
+                                strategic_takeaway = "應重點關注債市殖利率曲線變化與就業數據，評估資金成本對高估值資產帶來的估值重估壓力。"
+                            elif "nvidia" in kw_lower or "ai" in kw_lower or "chip" in kw_lower or "tech" in kw_lower:
+                                thematic_focus = "人工智慧產業鏈需求爆發、半導體資本支出與科技巨頭財報展望"
+                                policy_stance = "強勁成長動能與高法人期待值並存的結構性行情"
+                                strategic_takeaway = "建議聚焦具備真實獲利支撐與全球供應鏈壁壘的龍頭標的，留意短線漲多後的籌碼交換與財報預期落差。"
+                            else:
+                                thematic_focus = f"「{search_kw}」所引發的市場資金重新定價與宏觀連鎖效應"
+                                policy_stance = "多空角力加劇、尋找結構性亮點的過渡階段"
+                                strategic_takeaway = f"建議跳脫單一新聞事件，從整體總經循環與風險報酬比出發，對「{search_kw}」相關資產採取分批佈局策略。"
 
-1. **輿論風向與敏感度解構**：圍繞 **「{search_kw}」** 檢索到的最新財經頭條顯示，市場正高度聚焦於該議題帶來的政策轉折與資金重新定價。
-2. **核心新聞內涵剖析**：從最具代表性的頭條 *「{first_news}」* 可以看出，當前多空雙方在該領域的角力正在加劇；而輔助觀察點 *「{second_news}」* 更進一步凸顯了機構投資人的佈局邏輯。
-3. **宏觀啟示與行動建議**：針對 **{search_kw}** 所反映出的市場情緒與結構性變化，建議投資人跳脫單一新聞解讀，改從整體資金流向與政策預期差來評估後續風險。"""
+                            fallback_news = f"""### 🏛️ 「{search_kw}」專題輿論與政策深度剖析報告
+
+1. **核心議題焦點與風向解構**：本次輿論量化分析聚焦於 **{thematic_focus}**。透過檢索到的最新財經頭條（如 *「{first_news}」*），當前市場正對該主題進行高強度的預期重估。
+2. **多空訊號與政策立場判定**：結合新聞 *「{second_news}」* 的脈絡，目前的宏觀與資金態勢顯示出 **{policy_stance}** 的特徵，各方資金對後續走勢保持高度敏感。
+3. **戰術操作與風險啟示**：針對 **{search_kw}** 在當前市場環境下的特殊定位，{strategic_takeaway}"""
 
                             ai_success = False
                             ai_text = ""
@@ -482,8 +501,8 @@ else:
                                 try:
                                     client = genai.Client(api_key=gemini_key)
                                     news_text = "\n".join([f"- {t}" for t in news_titles[:8]])
-                                    prompt = f"""請針對使用者自訂的關鍵字主題「{search_kw}」，深度解讀以下抓取到的 {len(news_titles)} 條最新財經新聞標題。請撰寫一份高度客製化、針對該主題的專業輿論與政策立場報告（繁體中文，約 250-300 字）：\n{news_text}
-注意：必須完全圍繞「{search_kw}」與實際新聞標題進行專題式深度剖析，絕不可套用制式或籠統的範本！"""
+                                    prompt = f"""請針對使用者自訂的關鍵字主題「{search_kw}」，深度解讀以下抓取到的 {len(news_titles)} 條最新財經新聞標題。請撰寫一份高度客製化、針對該主題（例如科技、加密貨幣、聯準會總經或特定產業）的專業輿論與政策立場分析報告（繁體中文，約 250-300 字）：\n{news_text}
+注意：必須嚴格針對「{search_kw}」與這些實際新聞標題的獨特性進行專題式深度剖析，絕不可套用籠統或制式的總經模板！"""
                                     response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                                     if response and response.text:
                                         ai_text = response.text
