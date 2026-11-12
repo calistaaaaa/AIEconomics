@@ -387,7 +387,6 @@ else:
                 if st.button(f"🚀 啟動 {selected_name} AI 技術深度剖析", type="primary", use_container_width=True):
                     with st.spinner(f"AI 正在針對 {selected_name} 進行獨家量化與圖表型態解讀..."):
                         
-                        # 依照不同資產類別提供完全不同的專業分析角度與句型結構
                         if "比特幣" in selected_name or "以太坊" in selected_name:
                             asset_angle_text = "加密資產高波動特性、鏈上流動性與期權交割前夕的籌碼博弈"
                             strategy_advice = "由於加密貨幣市場全天候交易且槓桿率偏高，建議嚴格執行動態停損，並觀察爆倉量與資金費率變化。"
