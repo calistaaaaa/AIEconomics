@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import yfinance as yf
 from fredapi import Fred
 import feedparser
@@ -11,7 +14,7 @@ from urllib.parse import quote
 # 0. 頁面全域配置
 # ==========================================
 st.set_page_config(
-    page_title="全球金融總經與 Gemini AI 智慧戰情室", 
+    page_title="全球金融總經、加密貨幣技術分析與 AI 智慧戰情室", 
     page_icon="🌐", 
     layout="wide"
 )
@@ -50,12 +53,13 @@ else:
 
 st.sidebar.markdown("---")
 
-# 導覽列選擇
+# 導覽列選擇（加入技術分析與 AI 預測頁面）
 nav_choice = st.sidebar.radio(
     "📂 功能導覽",
     [
         "📊 核心總經與市場摘要", 
         "📈 全球股市與總經走勢", 
+        "🤖 股票/加密貨幣技術分析與 AI 預測",
         "📰 即時 Gemini AI 智慧分析戰情室"
     ]
 )
@@ -65,7 +69,7 @@ if st.sidebar.button("🔄 重新整理所有快取資料", use_container_width=
     st.rerun()
 
 # ==========================================
-# 2. 數據抓取函式 (FRED, yfinance, RSS 新聞)
+# 2. 數據抓取與技術指標計算函式
 # ==========================================
 @st.cache_data(ttl=3600)
 def get_fred_data(api_key):
@@ -89,12 +93,42 @@ def get_market_data():
         "輝達 (NVDA)": "NVDA",
         "蘋果 (AAPL)": "AAPL",
         "特斯拉 (TSLA)": "TSLA",
+        "比特幣 (BTC-USD)": "BTC-USD",
+        "以太坊 (ETH-USD)": "ETH-USD",
         "布蘭特原油": "BZ=F",
         "美元/台幣匯率": "TWD=X"
     }
     df = yf.download(list(tickers.values()), period="1y")["Close"]
     inv_tickers = {v: k for k, v in tickers.items()}
     df = df.rename(columns=inv_tickers)
+    return df
+
+@st.cache_data(ttl=300)
+def get_single_asset_data(ticker, period="6mo"):
+    df = yf.download(ticker, period=period)
+    # 處理 yfinance 多階層欄位名稱
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return df
+
+def calculate_technical_indicators(df):
+    # 移動平均線 (SMA)
+    df['SMA_20'] = df['Close'].rolling(window=20).mean()
+    df['SMA_50'] = df['Close'].rolling(window=50).mean()
+    
+    # RSI 計算 (14日)
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # MACD 計算 (12, 26, 9)
+    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp1 - exp2
+    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    
     return df
 
 @st.cache_data(ttl=1800)
@@ -111,7 +145,7 @@ if not fred_key:
     st.warning("⚠️ 請先於左側側邊欄輸入您的 **FRED API Key** 以啟用完整系統數據。")
 else:
     try:
-        with st.spinner("正在連線至 FRED 與 Yahoo Finance 獲取即時數據..."):
+        with st.spinner("正在連線至 FRED 與 Yahoo Finance 獲取即時資料..."):
             macro_df = get_fred_data(fred_key)
             market_df = get_market_data()
 
@@ -140,7 +174,7 @@ else:
             col4.metric("聯邦基金利率", f"{latest_fed:.2f}%")
 
             st.write("")
-            st.info("💡 提示：您可以透過左側選單切換至「全球股市與總經走勢」檢視互動圖表，或至「即時 Gemini AI 智慧分析戰情室」進行輿論情緒與鷹鴿派分析。")
+            st.info("💡 提示：您可以透過左側選單切換至「股票/加密貨幣技術分析與 AI 預測」或「即時 AI 智慧分析戰情室」。")
 
         # ----------------------------------------------------
         # 頁面二：全球股市與總經走勢
@@ -150,7 +184,6 @@ else:
             st.markdown("透過互動式圖表深度探索各大指數、美台權值股與總經指標在過去一年的表現軌跡。")
             st.write("---")
 
-            # 上半部：股市資產比較
             st.subheader("🇺🇸🇹🇼 全球股市與金融商品走勢")
             selected_markets = st.multiselect(
                 "勾選要比較的股票與標的：", 
@@ -167,7 +200,6 @@ else:
 
             st.write("---")
 
-            # 下半部：總經指標
             st.subheader("🏛️ 美國總體經濟指標走勢")
             macro_choice = st.selectbox("選擇要檢視的總體經濟指標：", macro_df.columns)
             fig2 = px.line(macro_df, y=macro_choice, title=f"近一年 {macro_choice} 歷史變動圖")
@@ -175,7 +207,121 @@ else:
             st.plotly_chart(fig2, use_container_width=True)
 
         # ----------------------------------------------------
-        # 頁面三：即時 Gemini AI 智慧分析戰情室
+        # 頁面三：股票/加密貨幣技術分析與 AI 預測
+        # ----------------------------------------------------
+        elif nav_choice == "🤖 股票/加密貨幣技術分析與 AI 預測":
+            st.title("📈 股票 / 加密貨幣技術分析與 AI 預測")
+            st.markdown("選取特定標的，檢視歷史走勢、技術指標（SMA、RSI、MACD），並透過 Gemini AI 進行趨勢解讀與買賣訊號評估。")
+            st.write("---")
+
+            # 標的選擇與時間週期
+            col_sel1, col_sel2 = st.columns([2, 1])
+            with col_sel1:
+                asset_options = {
+                    "蘋果 (AAPL)": "AAPL",
+                    "特斯拉 (TSLA)": "TSLA",
+                    "輝達 (NVDA)": "NVDA",
+                    "台積電 (2330.TW)": "2330.TW",
+                    "比特幣 (BTC-USD)": "BTC-USD",
+                    "以太坊 (ETH-USD)": "ETH-USD",
+                    "S&P 500 指數基金 (SPY)": "SPY"
+                }
+                selected_name = st.selectbox("🎯 選擇分析標的：", list(asset_options.keys()))
+                ticker_symbol = asset_options[selected_name]
+
+            with col_sel2:
+                period_choice = st.selectbox("⏱️ 選擇歷史區間：", ["3mo", "6mo", "1y", "2y"], index=1)
+
+            # 抓取並計算技術指標
+            with st.spinner(f"正在載入 {selected_name} 的技術數據中..."):
+                asset_df = get_single_asset_data(ticker_symbol, period=period_choice)
+                asset_df = calculate_technical_indicators(asset_df)
+
+            if not asset_df.empty:
+                latest_price = asset_df['Close'].iloc[-1]
+                prev_price = asset_df['Close'].iloc[-2]
+                price_change = latest_price - prev_price
+                price_pct = (price_change / prev_price) * 100
+                latest_rsi = asset_df['RSI'].iloc[-1]
+
+                # 顯示即時指標卡片
+                mcol1, mcol2, mcol3 = st.columns(3)
+                mcol1.metric("最新收盤價", f"{latest_price:.2f}", f"{price_change:+.2f} ({price_pct:+.2f}%)")
+                mcol2.metric("14日 RSI 強弱指標", f"{latest_rsi:.1f}", "超買 > 70 | 超賣 < 30" if latest_rsi else "")
+                mcol3.metric("資料筆數", f"{len(asset_df)} 交易日")
+
+                st.write("")
+
+                # 動態互動式 Plotly 技術圖表 (子圖表：價格與均線 / RSI / MACD)
+                fig = make_subplots(
+                    rows=3, cols=1, 
+                    shared_xaxes=True, 
+                    vertical_spacing=0.05, 
+                    row_heights=[0.5, 0.25, 0.25],
+                    subplot_titles=(f"{selected_name} 價格與均線 (SMA 20/50)", "RSI 相對強弱指標", "MACD 動能指標")
+                )
+
+                # 1. 價格與 SMA
+                fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['Close'], name="收盤價", line=dict(color="#58a6ff")), row=1, col=1)
+                fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['SMA_20'], name="SMA 20", line=dict(color="#ffa657", dash="dot")), row=1, col=1)
+                fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['SMA_50'], name="SMA 50", line=dict(color="#ff7b72", dash="dot")), row=1, col=1)
+
+                # 2. RSI
+                fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['RSI'], name="RSI", line=dict(color="#bc8cff")), row=2, col=1)
+                fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
+                fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
+
+                # 3. MACD
+                fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['MACD'], name="MACD", line=dict(color="#3fb950")), row=3, col=1)
+                fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['Signal_Line'], name="Signal", line=dict(color="#f85149")), row=3, col=1)
+
+                fig.update_layout(height=800, template="plotly_dark", margin=dict(l=20, r=20, t=40, b=20))
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.write("---")
+
+                # Gemini AI 技術預測與買賣訊號解讀
+                st.subheader(f"🤖 Gemini AI 技術面預測與買賣訊號解讀 ({selected_name})")
+                if not gemini_key:
+                    st.warning("👈 請先在左側輸入您的 **Gemini API Key** 以解鎖 AI 技術面預測功能。")
+                else:
+                    if st.button(f"🚀 啟動 {selected_name} AI 技術深度剖析", type="primary", use_container_width=True):
+                        with st.spinner("Gemini 量化分析師正在解讀圖表與技術指標中..."):
+                            try:
+                                summary_text = f"""
+                                標的名稱: {selected_name} ({ticker_symbol})
+                                最新收盤價: {latest_price:.2f}
+                                SMA 20: {asset_df['SMA_20'].iloc[-1]:.2f}
+                                SMA 50: {asset_df['SMA_50'].iloc[-1]:.2f}
+                                14日 RSI: {latest_rsi:.1f}
+                                MACD: {asset_df['MACD'].iloc[-1]:.2f}, Signal: {asset_df['Signal_Line'].iloc[-1]:.2f}
+                                """
+                                
+                                prompt = f"""
+                                你是一位專業的華爾街量化技術分析師與加密貨幣/股票交易專家。請根據以下技術指標數據進行深度解讀：
+                                {summary_text}
+
+                                請以繁體中文輸出結構化專業報告，包含：
+                                1. **當前趨勢判定** (多頭排列/空頭排列/盤整期)
+                                2. **技術指標解讀** (結合 SMA、RSI 超買超賣狀態、MACD 動能交叉)
+                                3. **AI 預測與短中期支撐/壓力位建議**
+                                4. **操作建議與買賣訊號評估** (買進/賣出/觀望，並附帶風險提示)
+                                """
+                                
+                                client = genai.Client(api_key=gemini_key)
+                                response = client.models.generate_content(
+                                    model='gemini-2.5-flash',
+                                    contents=prompt,
+                                )
+                                st.markdown("---")
+                                st.markdown(response.text)
+                            except Exception as e:
+                                st.error(f"AI 分析發生錯誤: {e}")
+            else:
+                st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
+
+        # ----------------------------------------------------
+        # 頁面四：即時 Gemini AI 智慧分析戰情室
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.title("🤖 即時 Gemini AI 智慧分析戰情室")
@@ -184,14 +330,13 @@ else:
 
             search_kw = st.text_input(
                 "🔍 自訂新聞搜尋關鍵字:", 
-                value="Federal Reserve Stock Market Inflation"
+                value="Federal Reserve Stock Market Crypto"
             )
             max_news_count = st.slider("抓取新聞則數", min_value=3, max_value=15, value=8)
             news_titles = fetch_google_news(search_kw, max_news_count)
 
             col_news, col_ai = st.columns([1, 1], gap="large")
 
-            # 左側：即時新聞清單
             with col_news:
                 st.subheader(f"📌 即時財經新聞流 (關鍵字: `{search_kw}`)")
                 if news_titles:
@@ -204,7 +349,6 @@ else:
                 else:
                     st.warning("查無相關新聞標題，請嘗試更換關鍵字。")
 
-            # 右側：Gemini AI 分析
             with col_ai:
                 st.subheader("📊 Gemini AI 深度輿論量化分析")
                 
@@ -222,7 +366,7 @@ else:
 
                                     請以專業繁體中文輸出結構化報告，包含以下項目：
                                     1. **整體市場情緒指數** (0 到 100 分，0 代表極度悲觀/恐慌，100 代表極度樂觀)
-                                    2. **貨幣政策與股市影響立場判定** (整體偏向 鷹派 / 鴿派 / 中立)
+                                    2. **貨幣政策與股市/加密貨幣影響立場判定** (整體偏向 鷹派 / 鴿派 / 中立)
                                     3. **關鍵總結與市場驅動因子** (簡述目前市場焦點與隱憂)
                                     4. **逐條新聞立場評分表** (請用 Markdown 表格呈現，欄位包含：[編號, 新聞標題簡述, 立場(鷹/鴿/中), 影響評分(-5至+5)])
                                     """
