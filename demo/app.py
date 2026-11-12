@@ -85,10 +85,14 @@ if "FRED_API_KEY" in st.secrets:
 else:
     fred_key = st.sidebar.text_input("輸入 FRED API Key:", type="password")
 
-# Gemini Key 改為選填，若無輸入系統會提供內建模擬分析或嘗試呼叫
-gemini_key = st.sidebar.text_input("輸入 Gemini API Key (選填):", type="password")
-if "GEMINI_API_KEY" in st.secrets and not gemini_key:
+gemini_key = None
+if "GEMINI_API_KEY" in st.secrets:
     gemini_key = st.secrets["GEMINI_API_KEY"]
+    st.sidebar.success("已自動載入 Gemini API Key")
+else:
+    gemini_input = st.sidebar.text_input("輸入 Gemini API Key:", type="password")
+    if gemini_input:
+        gemini_key = gemini_input
 
 st.sidebar.markdown("---")
 
@@ -256,11 +260,11 @@ else:
             st.plotly_chart(fig2, use_container_width=True)
 
         # ----------------------------------------------------
-        # 頁面三：股票/加密貨幣技術分析與 AI 預測 (附帶按鈕，免強制 Key)
+        # 頁面三：股票/加密貨幣技術分析與 AI 預測 (按鈕觸發 200~300 字簡要分析)
         # ----------------------------------------------------
         elif nav_choice == "🤖 股票/加密貨幣技術分析與 AI 預測":
             st.title("📈 股票 / 加密貨幣技術分析與 AI 預測")
-            st.markdown("選取特定標的，檢視歷史走勢與技術指標（SMA、RSI、MACD），點擊下方按鈕即可立即產出 AI 分析報告。")
+            st.markdown("選取特定標的，檢視歷史走勢與技術指標，點擊下方按鈕即可透過 Gemini AI 產出約 200-300 字的精煉解讀。")
             st.write("---")
 
             col_sel1, col_sel2 = st.columns([2, 1])
@@ -334,63 +338,40 @@ else:
 
                 st.write("---")
 
-                # 【保留按鈕】點擊後執行 AI 分析
                 st.subheader(f"🤖 Gemini AI 技術面預測與買賣訊號解讀 ({selected_name})")
                 if st.button(f"🚀 啟動 {selected_name} AI 技術深度剖析", type="primary", use_container_width=True):
-                    with st.spinner("Gemini 量化分析師正在解讀圖表與技術指標中..."):
-                        try:
-                            summary_text = f"""
-                            標的名稱: {selected_name} ({ticker_symbol})
-                            最新收盤價: {latest_price:.2f}
-                            SMA 20: {asset_df['SMA_20'].iloc[-1]:.2f}
-                            SMA 50: {asset_df['SMA_50'].iloc[-1]:.2f}
-                            14日 RSI: {latest_rsi:.1f}
-                            MACD: {asset_df['MACD'].iloc[-1]:.2f}, Signal: {asset_df['Signal_Line'].iloc[-1]:.2f}
-                            """
-                            
-                            prompt = f"""
-                            你是一位專業的華爾街量化技術分析師與加密貨幣/股票交易專家。請根據以下技術指標數據進行深度解讀：
-                            {summary_text}
-
-                            請以繁體中文輸出結構化專業報告，包含：
-                            1. **當前趨勢判定** (多頭排列/空頭排列/盤整期)
-                            2. **技術指標解讀** (結合 SMA、RSI 超買超賣狀態、MACD 動能交叉)
-                            3. **AI 預測與短中期支撐/壓力位建議**
-                            4. **操作建議與買賣訊號評估** (買進/賣出/觀望，並附帶風險提示)
-                            """
-                            
-                            if gemini_key:
+                    if not gemini_key:
+                        st.warning("⚠️ 請先於左側側邊欄輸入您的 Gemini API Key。")
+                    else:
+                        with st.spinner("Gemini 正在產生精煉分析報告中..."):
+                            try:
+                                summary_text = f"""
+                                標的: {selected_name} ({ticker_symbol}), 收盤價: {latest_price:.2f}, 
+                                SMA 20: {asset_df['SMA_20'].iloc[-1]:.2f}, SMA 50: {asset_df['SMA_50'].iloc[-1]:.2f}, 
+                                14日 RSI: {latest_rsi:.1f}, MACD: {asset_df['MACD'].iloc[-1]:.2f}
+                                """
+                                prompt = f"""
+                                你是華爾街量化分析師。請依據以下技術數據進行分析，並嚴格限制總字數在 200 至 300 字之間，以繁體中文條列輸出：
+                                {summary_text}
+                                包含：1. 趨勢判定 2. 指標解讀 3. 操作建議與風險。
+                                """
                                 client = genai.Client(api_key=gemini_key)
                                 response = client.models.generate_content(
                                     model='gemini-2.5-flash',
                                     contents=prompt,
                                 )
                                 st.markdown(response.text)
-                            else:
-                                # 若無輸入 API Key，提供智能模擬量化分析報告
-                                st.success("已完成技術指標量化運算（模擬專業 AI 戰情室解析）：")
-                                st.markdown(f"""
-                                ### 📊 {selected_name} 技術面與 AI 深度解讀報告
-                                1. **當前趨勢判定**：目前價格位於 SMA 20 與 SMA 50 附近，短線呈現**盤整偏多**格局，多空雙方正在當前均線區間進行交方拉鋸。
-                                2. **技術指標解讀**：
-                                   - **RSI (14)**：目前數值為 `{latest_rsi:.1f}`，處於中性健康區間（未過度超買或超賣），顯示市場動能尚在。
-                                   - **MACD 動能**：DIF 與 Signal 線呈現糾結或微幅交叉狀態，暗示下一波趨勢突破即將來臨。
-                                3. **短中期支撐與壓力位建議**：
-                                   - **壓力位**：近期高點或 SMA 20 上方 3%~5% 區間。
-                                   - **支撐位**：近期低點或 SMA 50 長期均線防守價位。
-                                4. **操作建議與風險提示**：建議採取「逢回低接」或「區間操作」策略，嚴守停損點以因應宏觀市場波動風險。
-                                """)
-                        except Exception as e:
-                            st.error(f"AI 分析發生錯誤: {e}")
+                            except Exception as e:
+                                st.error(f"AI 分析發生錯誤: {e}")
             else:
                 st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
 
         # ----------------------------------------------------
-        # 頁面四：即時 Gemini AI 智慧分析戰情室 (附帶按鈕，免強制 Key)
+        # 頁面四：即時 Gemini AI 智慧分析戰情室 (按鈕觸發 200~300 字簡要分析)
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.title("🤖 即時 Gemini AI 智慧分析戰情室")
-            st.markdown("結合即時 **Google News RSS** 與 **Gemini 智慧模型**，為您進行總體經濟、貨幣政策立場與市場情緒量化評分。")
+            st.markdown("結合即時 **Google News RSS** 與 **Gemini 智慧模型**，點擊下方按鈕即可產出約 200-300 字的精煉市場輿論與鷹鴿派立場報告。")
             st.write("---")
 
             search_kw = st.text_input(
@@ -417,51 +398,29 @@ else:
             with col_ai:
                 st.subheader("📊 Gemini AI 深度輿論量化分析")
                 
-                # 【保留按鈕】點擊後執行新聞情感與鷹鴿分析
                 if st.button("🚀 啟動 AI 鷹鴿情緒與政策立場剖析", type="primary", use_container_width=True):
-                    if news_titles:
-                        with st.spinner("Gemini 正在解讀新聞語意與市場情緒中..."):
-                            try:
-                                news_text = "\n".join([f"- {t}" for t in news_titles])
-                                prompt = f"""
-                                你是一位頂尖的華爾街總體經濟與量化分析師。請分析以下 {len(news_titles)} 條最新財經新聞標題：
-                                {news_text}
-
-                                請以專業繁體中文輸出結構化報告，包含以下項目：
-                                1. **整體市場情緒指數** (0 到 100 分，0 代表極度悲觀/恐慌，100 代表極度樂觀)
-                                2. **貨幣政策與股市/加密貨幣影響立場判定** (整體偏向 鷹派 / 鴿派 / 中立)
-                                3. **關鍵總結與市場驅動因子** (簡述目前市場焦點與隱憂)
-                                4. **逐條新聞立場評分表** (請用 Markdown 表格呈現，欄位包含：[編號, 新聞標題簡述, 立場(鷹/鴿/中), 影響評分(-5至+5)])
-                                """
-                                
-                                if gemini_key:
+                    if not gemini_key:
+                        st.warning("⚠️ 請先於左側側邊欄輸入您的 Gemini API Key。")
+                    else:
+                        if news_titles:
+                            with st.spinner("Gemini 正在解讀新聞並統整精煉報告中..."):
+                                try:
+                                    news_text = "\n".join([f"- {t}" for t in news_titles])
+                                    prompt = f"""
+                                    你是一位頂尖的華爾街總體經濟分析師。請分析以下新聞標題，並嚴格限制總字數在 200 至 300 字之間，以繁體中文輸出精煉報告：
+                                    {news_text}
+                                    包含：1. 市場情緒與分數 (0-100) 2. 政策立場 (鷹/鴿/中) 3. 核心驅動因子與短評。
+                                    """
                                     client = genai.Client(api_key=gemini_key)
                                     response = client.models.generate_content(
                                         model='gemini-2.5-flash',
                                         contents=prompt,
                                     )
                                     st.markdown(response.text)
-                                else:
-                                    # 若無輸入 API Key，提供模擬華爾街輿論分析報告
-                                    st.success("已完成即時輿論與鷹鴿派情緒量化打分（模擬專業 AI 戰情室解析）：")
-                                    st.markdown(f"""
-                                    ### 🏛️ 華爾街即時輿論與鷹鴿情緒報告
-                                    1. **整體市場情緒指數**：**68 / 100 分**（市場整體呈現審慎樂觀態度，風險偏好回溫）。
-                                    2. **貨幣政策立場判定**：**中立偏鴿派**（市場普遍預期央行將維持流動性穩定，並關注後續降息與資產負債表動向）。
-                                    3. **關鍵總結與驅動因子**：當前新聞焦點集中於總體通膨數據走勢、企業財報表現以及加密貨幣市場的資金流入狀況。
-                                    4. **逐條新聞立場評分表**：
-                                    
-| 編號 | 新聞標題簡述 | 立場 (鷹/鴿/中) | 影響評分 (-5 至 +5) |
-|:---:|:---|:---:|:---:|
-| 1 | 聯準會政策與利率動向觀察 | 中立 | 0 |
-| 2 | 科技股與加密貨幣資金流向 | 鴿派 | +3 |
-| 3 | 通膨數據與就業市場表現評估 | 鷹派 | -2 |
-| 4 | 全球供應鏈與原物料價格波動 | 中立 | +1 |
-                                    """)
-                            except Exception as e:
-                                st.error(f"AI 分析時發生錯誤: {e}")
-                    else:
-                        st.warning("目前沒有可供分析的新聞資料。")
+                                except Exception as e:
+                                    st.error(f"AI 分析時發生錯誤: {e}")
+                        else:
+                            st.warning("目前沒有可供分析的新聞資料。")
 
     except Exception as e:
         st.error(f"資料讀取失敗，請確認您的 FRED API Key 是否正確。詳細錯誤: {e}")
