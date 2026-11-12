@@ -191,9 +191,7 @@ def fetch_google_news(keyword, count=8):
 # ==========================================
 # 3. 主頁面渲染邏輯
 # ==========================================
-if not fred_key:
-    st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
-else:
+if fred_key:
     try:
         with st.spinner("正在連線至 FRED 與 Yahoo Finance 獲取即時資料..."):
             macro_df = get_fred_data(fred_key)
