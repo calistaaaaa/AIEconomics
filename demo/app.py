@@ -19,13 +19,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# 自訂暗色/現代化混合風格 CSS（強制全域文字顏色為亮色，避免黑底黑字）
+# 自訂暗色/現代化混合風格 CSS
 st.markdown("""
     <style>
         .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
         .news-card { background-color: #161b22; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #58a6ff; }
-        /* 確保全域文字與標題清晰 */
-        .stApp { color: #e6edf3; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -55,7 +53,7 @@ else:
 
 st.sidebar.markdown("---")
 
-# 導覽列選擇
+# 導覽列選擇（加入技術分析與 AI 預測頁面）
 nav_choice = st.sidebar.radio(
     "📂 功能導覽",
     [
@@ -108,20 +106,24 @@ def get_market_data():
 @st.cache_data(ttl=300)
 def get_single_asset_data(ticker, period="6mo"):
     df = yf.download(ticker, period=period)
+    # 處理 yfinance 多階層欄位名稱
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     return df
 
 def calculate_technical_indicators(df):
+    # 移動平均線 (SMA)
     df['SMA_20'] = df['Close'].rolling(window=20).mean()
     df['SMA_50'] = df['Close'].rolling(window=50).mean()
     
+    # RSI 計算 (14日)
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
     
+    # MACD 計算 (12, 26, 9)
     exp1 = df['Close'].ewm(span=12, adjust=False).mean()
     exp2 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = exp1 - exp2
@@ -191,14 +193,7 @@ else:
             
             if selected_markets:
                 fig1 = px.line(market_df, y=selected_markets, title="選定標的近一年價格走勢")
-                # 修正文字顏色，避免黑色字體看不見
-                fig1.update_layout(
-                    yaxis_title="價格 / 指數", 
-                    xaxis_title="日期", 
-                    legend_title="金融標的",
-                    template="plotly_dark",
-                    font=dict(color="#e6edf3")
-                )
+                fig1.update_layout(yaxis_title="價格 / 指數", xaxis_title="日期", legend_title="金融標的")
                 st.plotly_chart(fig1, use_container_width=True)
             else:
                 st.warning("請至少選擇一項金融標的以顯示圖表。")
@@ -208,12 +203,7 @@ else:
             st.subheader("🏛️ 美國總體經濟指標走勢")
             macro_choice = st.selectbox("選擇要檢視的總體經濟指標：", macro_df.columns)
             fig2 = px.line(macro_df, y=macro_choice, title=f"近一年 {macro_choice} 歷史變動圖")
-            fig2.update_layout(
-                yaxis_title="數值", 
-                xaxis_title="日期",
-                template="plotly_dark",
-                font=dict(color="#e6edf3")
-            )
+            fig2.update_layout(yaxis_title="數值", xaxis_title="日期")
             st.plotly_chart(fig2, use_container_width=True)
 
         # ----------------------------------------------------
@@ -224,6 +214,7 @@ else:
             st.markdown("選取特定標的，檢視歷史走勢、技術指標（SMA、RSI、MACD），並透過 Gemini AI 進行趨勢解讀與買賣訊號評估。")
             st.write("---")
 
+            # 標的選擇與時間週期
             col_sel1, col_sel2 = st.columns([2, 1])
             with col_sel1:
                 asset_options = {
@@ -241,6 +232,7 @@ else:
             with col_sel2:
                 period_choice = st.selectbox("⏱️ 選擇歷史區間：", ["3mo", "6mo", "1y", "2y"], index=1)
 
+            # 抓取並計算技術指標
             with st.spinner(f"正在載入 {selected_name} 的技術數據中..."):
                 asset_df = get_single_asset_data(ticker_symbol, period=period_choice)
                 asset_df = calculate_technical_indicators(asset_df)
@@ -252,6 +244,7 @@ else:
                 price_pct = (price_change / prev_price) * 100
                 latest_rsi = asset_df['RSI'].iloc[-1]
 
+                # 顯示即時指標卡片
                 mcol1, mcol2, mcol3 = st.columns(3)
                 mcol1.metric("最新收盤價", f"{latest_price:.2f}", f"{price_change:+.2f} ({price_pct:+.2f}%)")
                 mcol2.metric("14日 RSI 強弱指標", f"{latest_rsi:.1f}", "超買 > 70 | 超賣 < 30" if latest_rsi else "")
@@ -259,11 +252,11 @@ else:
 
                 st.write("")
 
-                # 建立 Plotly 子圖表
+                # 動態互動式 Plotly 技術圖表 (子圖表：價格與均線 / RSI / MACD)
                 fig = make_subplots(
                     rows=3, cols=1, 
                     shared_xaxes=True, 
-                    vertical_spacing=0.08, 
+                    vertical_spacing=0.05, 
                     row_heights=[0.5, 0.25, 0.25],
                     subplot_titles=(f"{selected_name} 價格與均線 (SMA 20/50)", "RSI 相對強弱指標", "MACD 動能指標")
                 )
@@ -275,26 +268,14 @@ else:
 
                 # 2. RSI
                 fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['RSI'], name="RSI", line=dict(color="#bc8cff")), row=2, col=1)
-                fig.add_hline(y=70, line_dash="dash", line_color="#ff7b72", row=2, col=1)
-                fig.add_hline(y=30, line_dash="dash", line_color="#3fb950", row=2, col=1)
+                fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
+                fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
 
                 # 3. MACD
                 fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['MACD'], name="MACD", line=dict(color="#3fb950")), row=3, col=1)
                 fig.add_trace(go.Scatter(x=asset_df.index, y=asset_df['Signal_Line'], name="Signal", line=dict(color="#f85149")), row=3, col=1)
 
-                # 強制使用 plotly_dark 模板並設定字體顏色為亮色，彻底解決黑字看不見的問題
-                fig.update_layout(
-                    height=800, 
-                    template="plotly_dark", 
-                    font=dict(color="#e6edf3", size=12),
-                    margin=dict(l=30, r=30, t=50, b=30),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                
-                # 更新所有子圖表的座標軸文字顏色
-                fig.update_xaxes(showgrid=True, gridcolor="#30363d")
-                fig.update_yaxes(showgrid=True, gridcolor="#30363d")
-
+                fig.update_layout(height=800, template="plotly_dark", margin=dict(l=20, r=20, t=40, b=20))
                 st.plotly_chart(fig, use_container_width=True)
 
                 st.write("---")
@@ -320,4 +301,88 @@ else:
                                 你是一位專業的華爾街量化技術分析師與加密貨幣/股票交易專家。請根據以下技術指標數據進行深度解讀：
                                 {summary_text}
 
-                                請以
+                                請以繁體中文輸出結構化專業報告，包含：
+                                1. **當前趨勢判定** (多頭排列/空頭排列/盤整期)
+                                2. **技術指標解讀** (結合 SMA、RSI 超買超賣狀態、MACD 動能交叉)
+                                3. **AI 預測與短中期支撐/壓力位建議**
+                                4. **操作建議與買賣訊號評估** (買進/賣出/觀望，並附帶風險提示)
+                                """
+                                
+                                client = genai.Client(api_key=gemini_key)
+                                response = client.models.generate_content(
+                                    model='gemini-2.5-flash',
+                                    contents=prompt,
+                                )
+                                st.markdown("---")
+                                st.markdown(response.text)
+                            except Exception as e:
+                                st.error(f"AI 分析發生錯誤: {e}")
+            else:
+                st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
+
+        # ----------------------------------------------------
+        # 頁面四：即時 Gemini AI 智慧分析戰情室
+        # ----------------------------------------------------
+        elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
+            st.title("🤖 即時 Gemini AI 智慧分析戰情室")
+            st.markdown("結合即時 **Google News RSS** 與 **Gemini 智慧模型**，為您進行總體經濟、貨幣政策立場（鷹/鴿派）與市場情緒量化評分。")
+            st.write("---")
+
+            search_kw = st.text_input(
+                "🔍 自訂新聞搜尋關鍵字:", 
+                value="Federal Reserve Stock Market Crypto"
+            )
+            max_news_count = st.slider("抓取新聞則數", min_value=3, max_value=15, value=8)
+            news_titles = fetch_google_news(search_kw, max_news_count)
+
+            col_news, col_ai = st.columns([1, 1], gap="large")
+
+            with col_news:
+                st.subheader(f"📌 即時財經新聞流 (關鍵字: `{search_kw}`)")
+                if news_titles:
+                    for i, title in enumerate(news_titles, 1):
+                        st.markdown(f"""
+                            <div class="news-card">
+                                <b>#{i}</b> {title}
+                            </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.warning("查無相關新聞標題，請嘗試更換關鍵字。")
+
+            with col_ai:
+                st.subheader("📊 Gemini AI 深度輿論量化分析")
+                
+                if not gemini_key:
+                    st.warning("👈 請先在左側輸入您的 **Gemini API Key** 以解鎖 AI 分析戰情室功能。")
+                else:
+                    if st.button("🚀 啟動 AI 鷹鴿情緒與政策立場剖析", type="primary", use_container_width=True):
+                        if news_titles:
+                            with st.spinner("Gemini 正在解讀新聞語意與市場情緒中..."):
+                                try:
+                                    news_text = "\n".join([f"- {t}" for t in news_titles])
+                                    prompt = f"""
+                                    你是一位頂尖的華爾街總體經濟與量化分析師。請分析以下 {len(news_titles)} 條最新財經新聞標題：
+                                    {news_text}
+
+                                    請以專業繁體中文輸出結構化報告，包含以下項目：
+                                    1. **整體市場情緒指數** (0 到 100 分，0 代表極度悲觀/恐慌，100 代表極度樂觀)
+                                    2. **貨幣政策與股市/加密貨幣影響立場判定** (整體偏向 鷹派 / 鴿派 / 中立)
+                                    3. **關鍵總結與市場驅動因子** (簡述目前市場焦點與隱憂)
+                                    4. **逐條新聞立場評分表** (請用 Markdown 表格呈現，欄位包含：[編號, 新聞標題簡述, 立場(鷹/鴿/中), 影響評分(-5至+5)])
+                                    """
+                                    
+                                    client = genai.Client(api_key=gemini_key)
+                                    response = client.models.generate_content(
+                                        model='gemini-2.5-flash',
+                                        contents=prompt,
+                                    )
+                                    
+                                    st.markdown("---")
+                                    st.markdown(response.text)
+                                except Exception as e:
+                                    st.error(f"AI 分析時發生錯誤: {e}")
+                        else:
+                            st.warning("目前沒有可供分析的新聞資料。")
+
+    except Exception as e:
+        st.error(f"資料讀取失敗，請確認您的 FRED API Key 是否正確。詳細錯誤: {e}")
