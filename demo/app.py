@@ -382,11 +382,11 @@ else:
                 st.subheader(f"🤖 Gemini AI 技術面預測與買賣訊號解讀 ({selected_name})")
                 if st.button(f"🚀 啟動 {selected_name} AI 技術深度剖析", type="primary", use_container_width=True):
                     with st.spinner("AI 正在分析技術指標並撰寫短評..."):
-                        fallback_tech = f"""### 📊 {selected_name} ({ticker_symbol}) 技術面與 AI 深度解讀報告
+                        fallback_tech = f"""### 📊 {selected_name} 技術面與 AI 深度解讀報告
 
-1. **當前趨勢判定**：目前收盤價報 **{latest_price:.2f}**，與短中期均線（SMA 20 及 SMA 50）交織，對應區間報酬率，短線呈現**震盪盤整**格局。
-2. **技術指標解讀**：14 日 RSI 指標目前為 **{latest_rsi:.1f}**，MACD 差值為 **{asset_df['MACD'].iloc[-1]:.2f}**，多空動能正在該價位區間蓄積。
-3. **操作建議與風險提示**：針對 {selected_name} 的當前走勢，建議投資人採取區間操作策略，並密切關注支撐與壓力位的突破狀況。"""
+1. **當前趨勢判定**：目前收盤價報 **{latest_price:.2f}**，與短中期均線（SMA 20 及 SMA 50）交織，短線呈現**震盪盤整**格局。
+2. **技術指標解讀**：14 日 RSI 指標目前為 **{latest_rsi:.1f}**，MACD 差值為 **{asset_df['MACD'].iloc[-1]:.2f}**，多空動能正在蓄積。
+3. **操作建議與風險提示**：建議採取區間操作策略，並密切關注支撐與壓力位的突破狀況。"""
 
                         ai_success = False
                         ai_text = ""
@@ -413,7 +413,7 @@ else:
                 st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
 
         # ----------------------------------------------------
-        # 頁面四：即時 Gemini AI 智慧分析戰情室 (已修正為動態結合關鍵字與新聞標題)
+        # 頁面四：即時 Gemini AI 智慧分析戰情室
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.title("🤖 即時 Gemini AI 智慧分析戰情室")
@@ -450,7 +450,6 @@ else:
                             first_news = news_titles[0] if news_titles else "無最新頭條"
                             second_news = news_titles[1] if len(news_titles) > 1 else "關注後續發展"
                             
-                            # 動態依據你輸入的關鍵字與抓到的新聞標題生成客製化分析內容
                             fallback_news = f"""### 🏛️ 「{search_kw}」即時輿論與政策立場動態報告
 
 1. **市場情緒指數**：根據針對關鍵字 **「{search_kw}」** 抓取的最新新聞輿論，當前綜合評分為 **71 / 100 分**（市場情緒隨最新頭條波動，整體偏向積極應變）。
@@ -483,5 +482,3 @@ else:
 
     except Exception as e:
         st.error(f"數據讀取失敗，請確認 FRED API Key 是否正確。錯誤訊息: {e}")
-else:
-    st.info("👈 請在左側輸入您的 FRED API Key 以開啟儀表板。")
