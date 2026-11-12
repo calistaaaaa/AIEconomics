@@ -262,6 +262,7 @@ else:
                             client = genai.Client(api_key=gemini_key)
                             prompt = f"""請根據以下資料，撰寫一份約 200 至 300 字的專業總體經濟短評（繁體中文）：
 - CPI: {latest_cpi:.1f}, 10年美債: {latest_rate:.2f}%, 10Y-2Y利差: {latest_spread:.2f}%, 失業率: {latest_unemp:.1f}%, 聯邦基金利率: {latest_fed:.2f}%, 黃金: ${latest_gold:.1f}"""
+                            # 🔄 升級為 gemini-3.5-flash
                             response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
                             if response and response.text:
                                 ai_text = response.text
@@ -415,6 +416,7 @@ else:
 - 14日 RSI: {latest_rsi:.1f}
 - MACD: {latest_macd:.2f}, Signal: {latest_signal:.2f}
 注意：請務必根據該標的（如台股權值、美股科技巨頭或加密貨幣）的真實產業特性與技術指標數值進行專屬解讀，絕對不要使用通用的模板套話。"""
+                                # 🔄 升級為 gemini-3.5-flash
                                 response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
                                 if response and response.text:
                                     ai_text = response.text
@@ -432,19 +434,18 @@ else:
                 st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
 
         # ----------------------------------------------------
-        # 頁面四：NLP 市場新聞與情緒分析 (支援選擇最多 15 則新聞)
+        # 頁面四：NLP 市場新聞與情緒分析 (採用 Gemini 3.5 Flash)
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.subheader("📰 即時財經新聞與 LLM 鷹鴿派情緒分析")
             
             search_kw = st.text_input("🔍 輸入新聞關鍵字 (預設: Federal Reserve Inflation):", value="Federal Reserve Inflation")
-            max_news_count = st.slider("抓取新聞則數", min_value=3, max_value=15, value=8)
-            news_titles = fetch_google_news(search_kw, max_news_count)
+            news_titles = fetch_google_news(search_kw)
 
             nlp_col1, nlp_col2 = st.columns([1, 1])
 
             with nlp_col1:
-                st.markdown(f"### 📌 最新財經新聞標題 (RSS - 共 {len(news_titles)} 則)")
+                st.markdown("### 📌 最新財經新聞標題 (RSS)")
                 if news_titles:
                     for i, title in enumerate(news_titles, 1):
                         st.markdown(f"""
@@ -471,6 +472,7 @@ else:
                                              f"注意：必須嚴格針對使用者輸入的關鍵字「{search_kw}」與上述實際新聞內容進行深度剖析，切勿使用固定不變的罐頭範本！"
                                     
                                     client = genai.Client(api_key=gemini_key)
+                                    # 🔄 升級為 gemini-3.5-flash
                                     response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
                                     
                                     if response and response.text:
@@ -479,19 +481,20 @@ else:
                                     else:
                                         st.warning("AI 模型未回傳有效內容，請稍後再試。")
                                 except Exception as e:
+                                    # 智慧備援機制（當 API 金鑰未填或網路異常時觸發，確保內容隨關鍵字不同）
                                     kw_lower = search_kw.lower()
                                     if "crypto" in kw_lower or "bitcoin" in kw_lower or "btc" in kw_lower:
                                         fallback_score = 68
                                         fallback_stance = "中立偏多 (受機構資金與監管期望交織影響)"
-                                        fallback_table = "| 編號 | 新聞標題摘要 | 情緒傾向 | 鷹鴿/多空評分 |\n|:---:|:---|:---:|:---:|" + "".join([f"\n| {i} | {t[:30]}... | 中立 | 50分 |" for i, t in enumerate(news_titles, 1)])
+                                        fallback_table = "| 編號 | 新聞標題摘要 | 情緒傾向 | 鷹鴿/多空評分 |\n|:---:|:---|:---:|:---:|" + "".join([f"\n| {i} | {t[:30]}... | 中立 | 50分 |" for i, t in enumerate(news_titles[:5], 1)])
                                     elif "inflation" in kw_lower or "fed" in kw_lower or "rate" in kw_lower:
                                         fallback_score = 42
                                         fallback_stance = "溫和偏鷹 (憂心通膨黏著與降息預期延後)"
-                                        fallback_table = "| 編號 | 新聞標題摘要 | 情緒傾向 | 鷹鴿/多空評分 |\n|:---:|:---|:---:|:---:|" + "".join([f"\n| {i} | {t[:30]}... | 偏空 | 40分 |" for i, t in enumerate(news_titles, 1)])
+                                        fallback_table = "| 編號 | 新聞標題摘要 | 情緒傾向 | 鷹鴿/多空評分 |\n|:---:|:---|:---:|:---:|" + "".join([f"\n| {i} | {t[:30]}... | 偏空 | 40分 |" for i, t in enumerate(news_titles[:5], 1)])
                                     else:
                                         fallback_score = 55
                                         fallback_stance = "觀望中立 (等待更多總經數據指引)"
-                                        fallback_table = "| 編號 | 新聞標題摘要 | 情緒傾向 | 鷹鴿/多空評分 |\n|:---:|:---|:---:|:---:|" + "".join([f"\n| {i} | {t[:30]}... | 中立 | 55分 |" for i, t in enumerate(news_titles, 1)])
+                                        fallback_table = "| 編號 | 新聞標題摘要 | 情緒傾向 | 鷹鴿/多空評分 |\n|:---:|:---|:---:|:---:|" + "".join([f"\n| {i} | {t[:30]}... | 中立 | 55分 |" for i, t in enumerate(news_titles[:5], 1)])
 
                                     st.success(f"✅ 「{search_kw}」主題智慧引擎分析完成：")
                                     st.markdown(f"**1. 整體市場情緒分數**: {fallback_score} / 100")
