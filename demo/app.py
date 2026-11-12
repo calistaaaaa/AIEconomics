@@ -262,7 +262,8 @@ else:
                             client = genai.Client(api_key=gemini_key)
                             prompt = f"""請根據以下資料，撰寫一份約 200 至 300 字的專業總體經濟短評（繁體中文）：
 - CPI: {latest_cpi:.1f}, 10年美債: {latest_rate:.2f}%, 10Y-2Y利差: {latest_spread:.2f}%, 失業率: {latest_unemp:.1f}%, 聯邦基金利率: {latest_fed:.2f}%, 黃金: ${latest_gold:.1f}"""
-                            response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                            # 🔄 升級為 gemini-3.5-flash
+                            response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
                             if response and response.text:
                                 ai_text = response.text
                                 ai_success = True
@@ -270,7 +271,7 @@ else:
                             ai_success = False
                     
                     if ai_success:
-                        st.success("✅ AI 總體經濟短評生成完畢（線上模型生成）：")
+                        st.success("✅ AI 總體經濟短評生成完畢（線上模型生成 - Gemini 3.5 Flash）：")
                         st.info(ai_text)
                     else:
                         st.success("✅ AI 總體經濟短評生成完畢（智慧宏觀分析引擎）：")
@@ -400,7 +401,7 @@ else:
                         fallback_tech = f"""### 📊 {selected_name} ({ticker_symbol}) 專屬量化技術報告 ({period_choice})
 
 1. **資產核心結構與趨勢解讀**：本篇報告聚焦於 **{asset_angle_text}**。當前收盤價報 **{latest_price:.2f}**，在區間內展現出獨特的價格軌跡。短期均線 SMA 20（**{sma20:.2f}**）與中期均線 SMA 50（**{sma50:.2f}**）正進行關鍵交疊。
-2. **多空動能與指標解構**：14 日 RSI 目前停留在 **{latest_rsi:.1f}**，顯示多空雙方在當前水位正進行拉鋸;同時 MACD 差值（**{latest_macd:.2f}**）與訊號線（**{latest_signal:.2f}**）的相對關係，確立了短線動能的強弱轉換點。
+2. **多空動能與指標解構**：14 日 RSI 目前停留在 **{latest_rsi:.1f}**，顯示多空雙方在當前水位正進行拉鋸；同時 MACD 差值（**{latest_macd:.2f}**）與訊號線（**{latest_signal:.2f}**）的相對關係，確立了短線動能的強弱轉換點。
 3. **專業操盤策略與風險提示**：針對 {selected_name} 的流動性與波動特性，{strategy_advice}"""
 
                         ai_success = False
@@ -415,7 +416,8 @@ else:
 - 14日 RSI: {latest_rsi:.1f}
 - MACD: {latest_macd:.2f}, Signal: {latest_signal:.2f}
 注意：請務必根據該標的（如台股權值、美股科技巨頭或加密貨幣）的真實產業特性與技術指標數值進行專屬解讀，絕對不要使用通用的模板套話。"""
-                                response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                                # 🔄 升級為 gemini-3.5-flash
+                                response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
                                 if response and response.text:
                                     ai_text = response.text
                                     ai_success = True
@@ -423,7 +425,7 @@ else:
                                 ai_success = False
                         
                         if ai_success:
-                            st.success(f"✅ {selected_name} AI 技術深度剖析完成（線上模型動態生成）：")
+                            st.success(f"✅ {selected_name} AI 技術深度剖析完成（線上模型動態生成 - Gemini 3.5 Flash）：")
                             st.info(ai_text)
                         else:
                             st.success(f"✅ {selected_name} AI 技術深度剖析完成（資產專屬量化引擎）：")
@@ -432,7 +434,7 @@ else:
                 st.warning("無法取得該標的的歷史數據，請確認代號是否正確。")
 
         # ----------------------------------------------------
-        # 頁面四：NLP 市場新聞與情緒分析 (完全依照你提供的邏輯與排版建構)
+        # 頁面四：NLP 市場新聞與情緒分析 (採用 Gemini 3.5 Flash)
         # ----------------------------------------------------
         elif nav_choice == "📰 即時 Gemini AI 智慧分析戰情室":
             st.subheader("📰 即時財經新聞與 LLM 鷹鴿派情緒分析")
@@ -455,11 +457,11 @@ else:
                     st.warning("查無相關新聞標題，請嘗試更換關鍵字。")
 
             with nlp_col2:
-                st.markdown("### 🤖 Gemini AI 鷹鴿派與情緒打分")
+                st.markdown("### 🤖 Gemini 3.5 Flash 鷹鴿派與情緒打分")
                 if gemini_key:
                     if st.button("🚀 開始分析新聞市場情緒", type="primary"):
                         if news_titles:
-                            with st.spinner("Gemini 正在剖析文本立場與鷹鴿情緒中..."):
+                            with st.spinner("Gemini 3.5 Flash 正在剖析文本立場與鷹鴿情緒中..."):
                                 try:
                                     news_text = "\n".join([f"- {t}" for t in news_titles])
                                     prompt = f"你是一位專業總體經濟分析師。請分析以下針對「{search_kw}」的 {len(news_titles)} 條新聞標題：\n{news_text}\n\n" \
@@ -470,15 +472,16 @@ else:
                                              f"注意：必須嚴格針對使用者輸入的關鍵字「{search_kw}」與上述實際新聞內容進行深度剖析，切勿使用固定不變的罐頭範本！"
                                     
                                     client = genai.Client(api_key=gemini_key)
-                                    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                                    # 🔄 升級為 gemini-3.5-flash
+                                    response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
                                     
                                     if response and response.text:
-                                        st.success("✅ Gemini AI 情緒與立場分析完成：")
+                                        st.success("✅ Gemini 3.5 Flash 情緒與立場分析完成：")
                                         st.markdown(response.text)
                                     else:
                                         st.warning("AI 模型未回傳有效內容，請稍後再試。")
                                 except Exception as e:
-                                    # 當網路或 API 發生例外時的動態智慧備援方案，確保每次搜尋內容都不同
+                                    # 智慧備援機制（當 API 金鑰未填或網路異常時觸發，確保內容隨關鍵字不同）
                                     kw_lower = search_kw.lower()
                                     if "crypto" in kw_lower or "bitcoin" in kw_lower or "btc" in kw_lower:
                                         fallback_score = 68
